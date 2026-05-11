@@ -11,9 +11,12 @@ from flask import Blueprint
 class Plugin:
     """Manifest for a single plugin.
 
-    A plugin module should expose a top-level ``PLUGIN`` instance of this class
-    (with ``blueprint`` populated). The blueprint will be mounted at
-    ``/plugins/<id>``.
+    A plugin must expose **one** of:
+    * ``blueprint``: a :class:`flask.Blueprint` to mount under
+      ``/plugins/<id>`` (built-in / drop-in plugins).
+    * ``wsgi_app``: a full WSGI callable (typically a Flask app returned by a
+      ``create_app()`` factory) to mount via ``DispatcherMiddleware``. Useful
+      for reusing existing standalone Flask projects unmodified.
 
     Fields:
         id: Stable slug. Becomes the URL prefix segment.
@@ -32,8 +35,10 @@ class Plugin:
             ``"secret.firebase_api_key"``) the plugin can consume. Used to
             decide which findings get an "Open in plugin" button in the
             Analysis tab.
-        blueprint: Flask Blueprint to mount. Must be set for the plugin to be
-            registered.
+        blueprint: Flask Blueprint to mount. Mutually exclusive with
+            ``wsgi_app``.
+        wsgi_app: WSGI callable (a Flask app). Mutually exclusive with
+            ``blueprint``.
         health: Optional callable returning ``{"ok": bool, "message": str}``;
             shown as a status badge in the plugins index.
     """
@@ -47,6 +52,7 @@ class Plugin:
     mode: str = "native"
     accepts: List[str] = field(default_factory=list)
     blueprint: Optional[Blueprint] = None
+    wsgi_app: Optional[Any] = None
     health: Optional[Callable[[], Dict[str, Any]]] = None
 
     def to_public_dict(self, *, healthy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

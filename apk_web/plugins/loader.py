@@ -27,9 +27,11 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from flask import Flask, Blueprint
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from apk_web.plugins import config as plugin_config
 from apk_web.plugins.registry import Plugin, PluginRegistry
+from apk_web.plugins.wsgi_gate import build_auth_gate
 
 _REGISTRY_KEY = "plugin_registry"
 _LOADED_FLAG = "_apk_wooper_plugins_loaded"
@@ -109,12 +111,36 @@ def _load_external_entry(entry: Dict[str, Any]) -> Plugin:
     external_path = entry.get("external_path")
     module_name = entry.get("module")
     blueprint_attr = entry.get("blueprint_attr") or "bp"
+    factory_attr = entry.get("factory")
     mode = entry.get("mode") or "iframe"
 
     if external_path:
         external_path = str(external_path)
         if external_path not in sys.path:
             sys.path.insert(0, external_path)
+
+    if module_name and factory_attr:
+        module = importlib.import_module(module_name)
+        factory = _resolve_attr(module, factory_attr)
+        if not callable(factory):
+            raise TypeError(
+                f"{module_name}.{factory_attr} is not callable"
+            )
+        kwargs = entry.get("factory_kwargs") or {}
+        wsgi_app = factory(**kwargs) if isinstance(kwargs, dict) else factory()
+        if wsgi_app is None:
+            raise RuntimeError(f"{module_name}.{factory_attr}() returned None")
+        return Plugin(
+            id=plugin_id,
+            name=str(entry.get("name") or plugin_id),
+            description=str(entry.get("description") or ""),
+            version=str(entry.get("version") or "0.0.0"),
+            icon=entry.get("icon"),
+            source="external",
+            mode=mode,
+            accepts=list(entry.get("accepts") or []),
+            wsgi_app=wsgi_app,
+        )
 
     if module_name:
         module = importlib.import_module(module_name)
@@ -166,7 +192,9 @@ def _coerce_plugin(module: Any, plugin_id: str, *, source: str) -> Optional[Plug
     plugin = getattr(module, "PLUGIN", None)
     if not isinstance(plugin, Plugin):
         return None
-    if not plugin.blueprint or not isinstance(plugin.blueprint, Blueprint):
+    has_blueprint = isinstance(plugin.blueprint, Blueprint)
+    has_wsgi = plugin.wsgi_app is not None
+    if not has_blueprint and not has_wsgi:
         return None
     # Force the on-disk folder name to win over a mismatched manifest id.
     if plugin.id != plugin_id:
@@ -176,19 +204,40 @@ def _coerce_plugin(module: Any, plugin_id: str, *, source: str) -> Optional[Plug
 
 
 def _register_plugin(app: Flask, registry: PluginRegistry, plugin: Plugin) -> None:
-    if plugin.blueprint is None:
-        raise RuntimeError(f"plugin {plugin.id} has no blueprint")
     url_prefix = f"/plugins/{plugin.id}"
-    blueprint = plugin.blueprint
-    # Rename the blueprint defensively so multiple plugins can coexist even if
-    # two external apps happen to use the same internal name.
-    if blueprint.name != f"plugin_{plugin.id}":
-        try:
-            blueprint.name = f"plugin_{plugin.id}"
-        except AttributeError:
-            pass
-    app.register_blueprint(blueprint, url_prefix=url_prefix)
+    if plugin.blueprint is not None:
+        blueprint = plugin.blueprint
+        # Rename the blueprint defensively so multiple plugins can coexist even
+        # if two external apps happen to use the same internal name.
+        if blueprint.name != f"plugin_{plugin.id}":
+            try:
+                blueprint.name = f"plugin_{plugin.id}"
+            except AttributeError:
+                pass
+        app.register_blueprint(blueprint, url_prefix=url_prefix)
+    elif plugin.wsgi_app is not None:
+        # Mount under an ``_app`` sub-prefix so the parent's ``/plugins/<id>``
+        # wrapper route (which renders the iframe) still wins.
+        _mount_wsgi(app, f"{url_prefix}/_app", plugin.wsgi_app)
+    else:
+        raise RuntimeError(
+            f"plugin {plugin.id} has neither a blueprint nor a wsgi_app"
+        )
     registry.add(plugin)
+
+
+def _mount_wsgi(app: Flask, url_prefix: str, wsgi_app: Any) -> None:
+    """Mount a foreign WSGI app under ``url_prefix`` via DispatcherMiddleware.
+
+    Reuses an existing DispatcherMiddleware if we already wrapped the app's
+    ``wsgi_app`` for an earlier plugin so multiple mounts stack cleanly.
+    """
+    gated = build_auth_gate(app, wsgi_app)
+    current = app.wsgi_app
+    if isinstance(current, DispatcherMiddleware):
+        current.mounts[url_prefix] = gated  # type: ignore[index]
+    else:
+        app.wsgi_app = DispatcherMiddleware(current, {url_prefix: gated})
 
 
 def _record_failure(app: Flask, registry: PluginRegistry, plugin_id: str, exc: Exception) -> None:

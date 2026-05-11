@@ -100,8 +100,91 @@ Toggles take effect from the next analysis run (use **Re-run analysis** to apply
 | `ANALYSIS_TEXT_MAX_BYTES` | `5 MB` | Per-file cap for text scanners |
 | `ANALYSIS_BINARY_MAX_BYTES` | `200 MB` | Per-file cap for `.so` scanners |
 
+## Plugins
+
+The dashboard supports **plugins** — small Flask blueprints (or whole Flask apps) mounted under `/plugins/<id>`. They appear in the sidebar "Plugins" panel and on a dedicated `/plugins` index page. Built-in plugins live under `apk_web/plugins/<id>/`; external plugins are listed in `plugins.json` (path overridable via `PLUGINS_CONFIG`).
+
+### Built-in plugins
+
+| ID | Description |
+| --- | --- |
+| `firebase` | Test Firebase Realtime Database endpoints discovered in decompiled APKs: connection check, full DB dump, restore from JSON, run custom REST requests, and generate copy-pasteable XSS payloads (LocalStorage dump, keylogger, fake login overlay, BeEF hook). |
+
+### `plugins.json`
+
+```json
+{
+  "enabled": [],
+  "disabled": [],
+  "external": [
+    {
+      "id": "gmap",
+      "name": "Google Maps Toolkit",
+      "external_path": "C:\\Users\\p\\Documents\\repo\\xss_vulnerability_scanner",
+      "module": "gmap_web",
+      "factory": "create_app",
+      "mode": "iframe",
+      "accepts": ["secret.google_api_key", "secret.mapbox_access_token"]
+    }
+  ]
+}
+```
+
+External entries can take three shapes:
+
+| Field combination | Mount strategy | When to use |
+| --- | --- | --- |
+| `module` + `blueprint_attr` | `app.register_blueprint(bp, url_prefix="/plugins/<id>")` | The third-party package exposes a Flask Blueprint. |
+| `module` + `factory` (+ optional `factory_kwargs`) | The factory is called and its returned Flask app is mounted under `/plugins/<id>/_app/` via `DispatcherMiddleware`, gated by the dashboard's login session. | The third-party project is a full standalone Flask app (it has a `create_app()` and depends on `app.config[...]`). This is the path that lets you reuse `gmap_web` unchanged. |
+| `external_path` only | Loader imports `<external_path>/plugin.py` (must expose a `PLUGIN` object). | One-off external folder you don't want to install as a real package. |
+
+In all cases:
+
+* `external_path` is prepended to `sys.path` so `module` becomes importable without `pip install`.
+* `mode` is `native` (the plugin paints onto the APK Wooper chrome by extending `plugins/plugin_base.html`) or `iframe` (the wrapper page shows the plugin in an iframe — recommended for `factory` mounts and any plugin with its own base template).
+* `accepts` is a list of Analysis `rule_id`s. Findings whose rule matches one of those get an **"Open in plugin"** button on the finding card that navigates to `/plugins/<id>?prefill=<base64 JSON>` with the matched value pre-filled.
+
+### Built-in plugin manifest
+
+A built-in plugin is just a folder under `apk_web/plugins/<id>/` containing a `plugin.py` that exposes a top-level `PLUGIN`:
+
+```python
+from flask import Blueprint
+from apk_web.plugins.registry import Plugin
+
+bp = Blueprint("myplug", __name__, template_folder="templates")
+
+@bp.route("/")
+def index():
+    return "hello"
+
+PLUGIN = Plugin(
+    id="myplug",
+    name="My plugin",
+    description="Does a thing.",
+    version="1.0.0",
+    mode="native",            # or "iframe"
+    accepts=["secret.openai"],
+    blueprint=bp,
+)
+```
+
+The blueprint is mounted at `/plugins/myplug`. Templates living in `apk_web/plugins/myplug/templates/myplug/index.html` are picked up automatically; extend `plugins/plugin_base.html` to get the "Back to jobs" header for free.
+
+### Settings UI
+
+Open Settings → **Plugins** to:
+
+* See every loaded plugin (with source, version, URL, mode).
+* Remove an external entry from `plugins.json`.
+* Add a new external entry via a small form (writes to `plugins.json` and surfaces a "restart required" hint — the server must restart to actually load a newly-added external plugin).
+
+### Toggling the system off
+
+Set `ENABLE_PLUGINS=0` to skip plugin discovery entirely (useful in tests or hostile environments).
+
 ## Tests
 
 ```bash
-pytest tests/test_apk_web.py tests/analysis -v
+pytest tests/test_apk_web.py tests/analysis tests/plugins -v
 ```

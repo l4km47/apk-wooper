@@ -33,18 +33,32 @@ def plugins_index():
 def plugin_entry(plugin_id: str):
     """Entry-point URL for a plugin.
 
-    For ``iframe`` plugins this renders a wrapper page containing an iframe
-    pointing at ``/plugins/<id>/`` (the plugin's own root). For ``native``
-    plugins we let the plugin's blueprint handle its own root, but if it didn't
-    register a root route this wrapper still works as a fallback.
+    The exact URL is ``/plugins/<id>`` (no trailing slash). For:
+
+    * Blueprint plugins in ``native`` mode -- redirect to the plugin's own
+      ``/plugins/<id>/`` index (its blueprint owns that).
+    * Plugins that need an iframe wrapper (``iframe`` mode or a WSGI sub-app
+      mounted under ``/plugins/<id>/_app/``) -- render ``plugins/iframe.html``
+      around the right inner URL.
     """
     registry = get_registry(current_app)
     plugin = registry.get(plugin_id)
     if plugin is None:
         abort(404)
+
+    is_wsgi = plugin.wsgi_app is not None
+    inner_root = f"/plugins/{plugin_id}/_app/" if is_wsgi else f"/plugins/{plugin_id}/"
+
+    if plugin.mode == "native" and not is_wsgi:
+        # Native plugins render their own page; let them handle the prefill.
+        target = inner_root
+        if request.args.get("prefill"):
+            target = f"{target}?prefill={request.args.get('prefill')}"
+        return current_app.redirect(target)
+
     prefill = _decode_prefill(request.args.get("prefill"))
-    iframe_url = f"/plugins/{plugin_id}/"
-    if prefill:
+    iframe_url = inner_root
+    if request.args.get("prefill"):
         sep = "&" if "?" in iframe_url else "?"
         iframe_url = f"{iframe_url}{sep}prefill={request.args.get('prefill')}"
     return render_template(

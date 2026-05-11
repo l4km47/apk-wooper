@@ -1,0 +1,20 @@
+{
+  "enabled": [],
+  "disabled": [],
+  "external": [
+    {
+      "id": "gmap",
+      "name": "Google Maps Toolkit",
+      "description": "Reuse of the existing gmap_web Flask dashboard for testing Google Maps API keys, replaying captured requests, and exporting results.",
+      "external_path": "C:\\Users\\p\\Documents\\repo\\xss_vulnerability_scanner",
+      "module": "gmap_web",
+      "factory": "create_app",
+      "mode": "iframe",
+      "accepts": [
+        "secret.google_api_key",
+        "secret.mapbox_access_token"
+      ],
+      "version": "external"
+    }
+  ]
+}

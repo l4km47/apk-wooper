@@ -84,6 +84,9 @@ def _normalise(data: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if not entry.get("id"):
             continue
+        factory_kwargs = entry.get("factory_kwargs") or {}
+        if not isinstance(factory_kwargs, dict):
+            factory_kwargs = {}
         cleaned_external.append(
             {
                 "id": str(entry.get("id")),
@@ -92,6 +95,8 @@ def _normalise(data: Dict[str, Any]) -> Dict[str, Any]:
                 "external_path": (str(entry["external_path"]) if entry.get("external_path") else None),
                 "module": str(entry.get("module") or "") or None,
                 "blueprint_attr": str(entry.get("blueprint_attr") or "bp"),
+                "factory": str(entry.get("factory") or "") or None,
+                "factory_kwargs": factory_kwargs,
                 "mode": str(entry.get("mode") or "iframe"),
                 "accepts": list(entry.get("accepts") or []),
                 "version": str(entry.get("version") or "0.0.0"),

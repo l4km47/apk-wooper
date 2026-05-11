@@ -198,80 +198,96 @@
         <button type="button" class="modal-close ghost small" data-settings-close aria-label="Close">x</button>
       </div>
       <div class="modal-body settings-body">
-        <section class="settings-section">
-          <div class="panel-head">
-            <h2>Java runtimes</h2>
-            <button id="refresh-java" type="button" class="ghost small">Scan</button>
-          </div>
-          <p class="muted small settings-copy">
-            The decompiler uses the selected Java runtime for JADX and Apktool. Scan again after installing or changing JDKs.
-          </p>
-          <p id="java-note" class="muted small"></p>
-          <p id="java-selected" class="small"></p>
-          <div id="java-list" class="java-list"></div>
-        </section>
+        <nav class="settings-nav" role="tablist" aria-label="Settings sections">
+          <button type="button" class="settings-nav-item active" data-settings-tab="java" role="tab" aria-selected="true">
+            <span class="settings-nav-icon" aria-hidden="true">&#9881;</span>
+            <span>Java runtimes</span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-tab="analysis" role="tab" aria-selected="false">
+            <span class="settings-nav-icon" aria-hidden="true">&#9881;</span>
+            <span>Analysis engine</span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-tab="plugins" role="tab" aria-selected="false">
+            <span class="settings-nav-icon" aria-hidden="true">&#9881;</span>
+            <span>Plugins</span>
+          </button>
+        </nav>
+        <div class="settings-panes">
+          <section class="settings-section" data-settings-pane="java">
+            <div class="panel-head">
+              <h2>Java runtimes</h2>
+              <button id="refresh-java" type="button" class="ghost small">Scan</button>
+            </div>
+            <p class="muted small settings-copy">
+              The decompiler uses the selected Java runtime for JADX and Apktool. Scan again after installing or changing JDKs.
+            </p>
+            <p id="java-note" class="muted small"></p>
+            <p id="java-selected" class="small"></p>
+            <div id="java-list" class="java-list"></div>
+          </section>
 
-        <section class="settings-section">
-          <div class="panel-head">
-            <h2>Analysis engine extras</h2>
-            <button id="refresh-tools" type="button" class="ghost small">Refresh</button>
-          </div>
-          <p class="muted small settings-copy">
-            Optional secret scanners run in addition to the built-in detectors. Enable a scanner and install its binary; toggles take effect from the next analysis run.
-          </p>
-          <div id="analysis-tools-list" class="analysis-tools-list"></div>
-        </section>
+          <section class="settings-section hidden" data-settings-pane="analysis">
+            <div class="panel-head">
+              <h2>Analysis engine extras</h2>
+              <button id="refresh-tools" type="button" class="ghost small">Refresh</button>
+            </div>
+            <p class="muted small settings-copy">
+              Optional secret scanners run in addition to the built-in detectors. Enable a scanner and install its binary; toggles take effect from the next analysis run.
+            </p>
+            <div id="analysis-tools-list" class="analysis-tools-list"></div>
+          </section>
 
-        <section class="settings-section">
-          <div class="panel-head">
-            <h2>Plugins</h2>
-            <button id="refresh-plugins-settings" type="button" class="ghost small">Refresh</button>
-          </div>
-          <p class="muted small settings-copy">
-            Built-in plugins live under <code>apk_web/plugins/</code>. External Flask apps can be mounted by absolute path; they appear in the sidebar and are reachable at <code>/plugins/&lt;id&gt;</code>. Adding or removing external plugins requires a server restart.
-          </p>
-          <div id="plugins-settings-list" class="plugins-settings-list"></div>
-          <details id="plugins-add-wrap" class="plugins-add-wrap">
-            <summary>Add external plugin</summary>
-            <form id="plugins-add-form" class="plugins-add-form">
-              <label>
-                <span>ID (slug)</span>
-                <input type="text" id="plg-id" placeholder="gmap" required />
-              </label>
-              <label>
-                <span>Display name</span>
-                <input type="text" id="plg-name" placeholder="Google Maps Toolkit" />
-              </label>
-              <label class="full">
-                <span>External path (added to sys.path)</span>
-                <input type="text" id="plg-path" placeholder="C:\path\to\parent\of\package" />
-              </label>
-              <label>
-                <span>Module</span>
-                <input type="text" id="plg-module" placeholder="gmap_web" />
-              </label>
-              <label>
-                <span>Blueprint attr</span>
-                <input type="text" id="plg-bp" value="bp" />
-              </label>
-              <label>
-                <span>Mode</span>
-                <select id="plg-mode">
-                  <option value="iframe">iframe</option>
-                  <option value="native">native</option>
-                </select>
-              </label>
-              <label>
-                <span>Accepts (comma-separated rule ids)</span>
-                <input type="text" id="plg-accepts" placeholder="secret.google_api_key" />
-              </label>
-              <div class="full plugins-add-actions">
-                <button type="submit" class="primary small">Add</button>
-                <span id="plg-add-status" class="muted small"></span>
-              </div>
-            </form>
-          </details>
-        </section>
+          <section class="settings-section hidden" data-settings-pane="plugins">
+            <div class="panel-head">
+              <h2>Plugins</h2>
+              <button id="refresh-plugins-settings" type="button" class="ghost small">Refresh</button>
+            </div>
+            <p class="muted small settings-copy">
+              Built-in plugins live under <code>apk_web/plugins/</code>. External Flask apps can be mounted by absolute path; they appear in the sidebar and are reachable at <code>/plugins/&lt;id&gt;</code>. Adding or removing external plugins requires a server restart.
+            </p>
+            <div id="plugins-settings-list" class="plugins-settings-list"></div>
+            <details id="plugins-add-wrap" class="plugins-add-wrap">
+              <summary>Add external plugin</summary>
+              <form id="plugins-add-form" class="plugins-add-form">
+                <label>
+                  <span>ID (slug)</span>
+                  <input type="text" id="plg-id" placeholder="gmap" required />
+                </label>
+                <label>
+                  <span>Display name</span>
+                  <input type="text" id="plg-name" placeholder="Google Maps Toolkit" />
+                </label>
+                <label class="full">
+                  <span>External path (added to sys.path)</span>
+                  <input type="text" id="plg-path" placeholder="C:\path\to\parent\of\package" />
+                </label>
+                <label>
+                  <span>Module</span>
+                  <input type="text" id="plg-module" placeholder="gmap_web" />
+                </label>
+                <label>
+                  <span>Blueprint attr</span>
+                  <input type="text" id="plg-bp" value="bp" />
+                </label>
+                <label>
+                  <span>Mode</span>
+                  <select id="plg-mode">
+                    <option value="iframe">iframe</option>
+                    <option value="native">native</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Accepts (comma-separated rule ids)</span>
+                  <input type="text" id="plg-accepts" placeholder="secret.google_api_key" />
+                </label>
+                <div class="full plugins-add-actions">
+                  <button type="submit" class="primary small">Add</button>
+                  <span id="plg-add-status" class="muted small"></span>
+                </div>
+              </form>
+            </details>
+          </section>
+        </div>
       </div>
       <div class="modal-foot">
         <button type="button" class="primary" data-settings-close>Done</button>

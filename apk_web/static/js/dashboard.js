@@ -414,11 +414,34 @@ async function loadJavaRuntimes(refresh) {
 async function openSettings() {
   if (!settingsModal) return;
   if (!settingsModal.open) settingsModal.showModal();
+  switchSettingsTab(_activeSettingsTab || "java");
   if (!_javaLoaded) {
     await loadJavaRuntimes(false);
   }
   void loadAnalysisTools();
+  void loadPlugins();
 }
+
+let _activeSettingsTab = "java";
+const settingsNavButtons = document.querySelectorAll(".settings-nav-item");
+const settingsPanes = document.querySelectorAll("[data-settings-pane]");
+
+function switchSettingsTab(name) {
+  if (!name) return;
+  _activeSettingsTab = name;
+  settingsNavButtons.forEach((btn) => {
+    const active = btn.dataset.settingsTab === name;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  settingsPanes.forEach((pane) => {
+    pane.classList.toggle("hidden", pane.dataset.settingsPane !== name);
+  });
+}
+
+settingsNavButtons.forEach((btn) => {
+  btn.addEventListener("click", () => switchSettingsTab(btn.dataset.settingsTab));
+});
 
 function openJobsModal() {
   if (!jobsModal) return;
@@ -1715,6 +1738,24 @@ function buildFindingRow(item) {
   rule.textContent = item.rule_id || "";
   head.appendChild(rule);
 
+  const matchingPlugins = pluginAcceptsRule(item.rule_id || "");
+  for (const plg of matchingPlugins) {
+    const openBtn = document.createElement("a");
+    openBtn.className = "finding-open-in-plugin";
+    openBtn.title = `Open in ${plg.name}`;
+    openBtn.textContent = `Open in ${plg.name}`;
+    const prefill = {
+      rule_id: item.rule_id || "",
+      match: item.full_match || item.match || "",
+      file: item.file || "",
+      line: item.line || 0,
+    };
+    const enc = btoa(unescape(encodeURIComponent(JSON.stringify(prefill))));
+    openBtn.href = `${plg.url}?prefill=${encodeURIComponent(enc)}`;
+    openBtn.addEventListener("click", (ev) => ev.stopPropagation());
+    head.appendChild(openBtn);
+  }
+
   const match = document.createElement("div");
   match.className = "finding-match";
   match.textContent = item.match || "";
@@ -1762,6 +1803,12 @@ function buildFindingRow(item) {
   });
 
   return row;
+}
+
+function refreshAnalysisListInPlace() {
+  if (_analysisCache && _analysisCache.findings) {
+    renderAnalysisList(_analysisCache);
+  }
 }
 
 function renderAnalysisList(state) {
