@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ plugin.name }} — APK Wooper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plugins.css') }}" />
+    {% block head_extra %}{% endblock %}
+  </head>
+  <body class="plugin-page">
+    <header class="plugin-topbar">
+      <a class="plugin-back" href="{{ url_for('pages.dashboard') }}" title="Back to dashboard">
+        <span aria-hidden="true">&larr;</span>
+        <span>Back to jobs</span>
+      </a>
+      <span class="plugin-topbar-title">{{ plugin.name }}</span>
+      <span class="plugin-topbar-meta muted small">
+        {{ plugin.source }} &middot; v{{ plugin.version }}
+      </span>
+    </header>
+    <main class="plugin-body">
+      {% block plugin_body %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

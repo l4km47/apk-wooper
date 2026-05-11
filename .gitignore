@@ -1,0 +1,9 @@
+workspaces/
+.apk_web/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.venv/
+.admin_password.txt
+tools/

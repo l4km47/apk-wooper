@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plugins — APK Wooper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plugins.css') }}" />
+  </head>
+  <body class="plugin-page">
+    <header class="plugin-topbar">
+      <a class="plugin-back" href="{{ url_for('pages.dashboard') }}" title="Back to dashboard">
+        <span aria-hidden="true">&larr;</span>
+        <span>Back to jobs</span>
+      </a>
+      <span class="plugin-topbar-title">Plugins</span>
+    </header>
+    <main class="plugin-body plugin-index">
+      {% if not plugins %}
+        <p class="muted small">No plugins installed yet. Add a built-in plugin under <code>apk_web/plugins/&lt;id&gt;/</code> or register an external one via Settings.</p>
+      {% endif %}
+      <div class="plugin-card-grid">
+        {% for p in plugins %}
+          <a class="plugin-card" href="{{ p.url }}">
+            <div class="plugin-card-head">
+              <span class="plugin-card-name">{{ p.name }}</span>
+              <span class="plugin-card-source {{ p.source }}">{{ p.source }}</span>
+            </div>
+            {% if p.description %}<p class="plugin-card-desc">{{ p.description }}</p>{% endif %}
+            <div class="plugin-card-meta muted small">
+              v{{ p.version }} &middot; {{ p.mode }}
+              {% if p.accepts %}&middot; {{ p.accepts|length }} rule(s){% endif %}
+            </div>
+            {% if not p.healthy.ok %}
+              <div class="plugin-card-warn">{{ p.healthy.message or 'unhealthy' }}</div>
+            {% endif %}
+          </a>
+        {% endfor %}
+      </div>
+      {% if load_errors %}
+        <section class="plugin-errors">
+          <h2>Load errors</h2>
+          <ul>
+            {% for err in load_errors %}
+              <li><strong>{{ err.source }}:</strong> {{ err.error }}</li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

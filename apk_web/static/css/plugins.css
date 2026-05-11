@@ -1,0 +1,262 @@
+/* Plugins index + plugin page wrapper styles. Reuses dashboard.css variables. */
+
+html,
+body.plugin-page {
+  height: 100%;
+}
+
+body.plugin-page {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.plugin-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.plugin-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.plugin-back:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(55, 148, 255, 0.4);
+}
+
+.plugin-topbar-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.plugin-topbar-meta {
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+
+.plugin-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px;
+  overflow: auto;
+}
+
+body.plugin-page-iframe .plugin-body,
+.plugin-page-iframe iframe.plugin-iframe {
+  padding: 0;
+}
+
+.plugin-iframe {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: var(--bg);
+}
+
+.plugin-page-iframe {
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-page-iframe .plugin-iframe {
+  flex: 1;
+  height: 100%;
+}
+
+/* Index page */
+
+.plugin-index h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.plugin-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.plugin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.plugin-card:hover {
+  border-color: rgba(55, 148, 255, 0.42);
+  background: rgba(55, 148, 255, 0.06);
+}
+
+.plugin-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-card-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.plugin-card-source {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.plugin-card-source.builtin {
+  background: rgba(55, 148, 255, 0.16);
+  color: #8ab8ff;
+}
+
+.plugin-card-source.external {
+  background: rgba(255, 178, 56, 0.18);
+  color: #f5b94a;
+}
+
+.plugin-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plugin-card-meta {
+  margin-top: auto;
+}
+
+.plugin-card-warn {
+  margin-top: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(244, 71, 71, 0.18);
+  color: #ff8585;
+  font-size: 11px;
+}
+
+.plugin-errors {
+  margin-top: 24px;
+  padding: 12px;
+  border: 1px solid rgba(244, 71, 71, 0.4);
+  border-radius: 6px;
+  background: rgba(244, 71, 71, 0.06);
+}
+
+.plugin-errors h2 {
+  margin-top: 0;
+  font-size: 12px;
+  color: #ff8585;
+}
+
+.plugin-errors ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+/* Generic plugin page card / form helpers for built-in plugins */
+
+.plugin-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.plugin-section h2 {
+  margin-top: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.plugin-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.plugin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plugin-form input[type="text"],
+.plugin-form input[type="url"],
+.plugin-form input[type="password"],
+.plugin-form textarea,
+.plugin-form select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.plugin-form-row-full {
+  grid-column: 1 / -1;
+}
+
+.plugin-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plugin-output {
+  max-height: 360px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d4d4d4;
+  margin-top: 8px;
+}

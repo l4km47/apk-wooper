@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>APK Wooper — Sign in</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+  </head>
+  <body class="auth-body">
+    <main class="auth-shell">
+      <section class="auth-hero" aria-hidden="true">
+        <div class="auth-hero-inner">
+          <div class="auth-brand">
+            <span class="auth-brand-mark">AW</span>
+            <span class="auth-brand-name">APK Wooper</span>
+          </div>
+          <h2 class="auth-tagline">
+            Drop an <span class="accent">.apk</span>.<br />
+            Read the source.
+          </h2>
+          <ul class="auth-features">
+            <li>
+              <span class="auth-feature-dot dot-blue"></span>
+              <div>
+                <strong>JADX decompile</strong>
+                <p>Java sources, resources, and AndroidManifest in one workspace.</p>
+              </div>
+            </li>
+            <li>
+              <span class="auth-feature-dot dot-green"></span>
+              <div>
+                <strong>Apktool smali</strong>
+                <p>Side-by-side smali + decoded resources for every job.</p>
+              </div>
+            </li>
+             
+          </ul>
+        </div>
+      </section>
+
+      <section class="auth-panel">
+        <div class="auth-card">
+          <header class="auth-card-head">
+            <span class="auth-eyebrow">Sign in</span>
+            <h1>Welcome back</h1>
+            <p class="muted">Enter the dashboard password to upload an APK and browse decompiled output.</p>
+          </header>
+
+          {% if not auth_configured %}
+            <div class="auth-alert warn" role="alert">
+              <strong>Server misconfiguration:</strong> no dashboard password is set. Re-run <code>build.sh</code> or <code>build.ps1</code> to provision one.
+            </div>
+          {% endif %}
+
+          <form method="post" class="auth-form" novalidate>
+            <label class="field">
+              <span class="field-label">Password</span>
+              <div class="field-control">
+                <input
+                  type="password"
+                  name="password"
+                  autocomplete="current-password"
+                  placeholder="••••••••••••"
+                  required
+                  autofocus
+                />
+                <button
+                  type="button"
+                  class="ghost small field-toggle"
+                  data-toggle-password
+                  aria-label="Show password"
+                >Show</button>
+              </div>
+            </label>
+
+            {% if error %}
+              <p class="auth-alert error" role="alert">{{ error }}</p>
+            {% endif %}
+
+            <button type="submit" class="primary auth-submit">Unlock dashboard</button>
+          </form>
+
+          <footer class="auth-card-foot">
+            <span class="muted small">Forgot the password? Check <code>.admin_password.txt</code> in your project root.</span>
+          </footer>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var toggle = document.querySelector("[data-toggle-password]");
+        if (!toggle) return;
+        var input = toggle.closest(".field-control").querySelector("input");
+        toggle.addEventListener("click", function () {
+          var isHidden = input.type === "password";
+          input.type = isHidden ? "text" : "password";
+          toggle.textContent = isHidden ? "Hide" : "Show";
+          toggle.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+          input.focus();
+        });
+      })();
+    </script>
+  </body>
+</html>

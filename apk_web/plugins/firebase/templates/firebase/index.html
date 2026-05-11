@@ -1,0 +1,211 @@
+{% extends "plugins/plugin_base.html" %}
+
+{% block plugin_body %}
+<section class="plugin-section" id="connect-section">
+  <h2>Connection</h2>
+  <p class="muted small">Realtime Database URL is required; API key is optional and only used as a query-param token if you have one (e.g. recovered from an APK).</p>
+  <form class="plugin-form" id="connect-form" autocomplete="off">
+    <label class="plugin-form-row-full">
+      <span>Database URL</span>
+      <input type="url" name="db_url" id="f-db-url" placeholder="https://example-default-rtdb.firebaseio.com" value="{{ prefill.db_url or '' }}" required />
+    </label>
+    <label class="plugin-form-row-full">
+      <span>API key / auth token (optional)</span>
+      <input type="text" name="api_key" id="f-api-key" placeholder="AIza..." value="{{ prefill.api_key or prefill.match or '' }}" />
+    </label>
+    <div class="plugin-form-row-full plugin-form-actions">
+      <button type="button" class="primary" id="btn-test">Test connection</button>
+      <button type="button" class="ghost" id="btn-dump">Download dump</button>
+      <button type="button" class="ghost" id="btn-restore">Restore from JSON...</button>
+      <input type="file" id="restore-file" accept=".json,application/json" hidden />
+    </div>
+  </form>
+  <pre class="plugin-output" id="connect-output" hidden></pre>
+</section>
+
+<section class="plugin-section">
+  <h2>Custom request</h2>
+  <form class="plugin-form" id="request-form" autocomplete="off">
+    <label>
+      <span>Method</span>
+      <select name="method" id="f-method">
+        <option>GET</option>
+        <option>POST</option>
+        <option>PUT</option>
+        <option>PATCH</option>
+        <option>DELETE</option>
+      </select>
+    </label>
+    <label>
+      <span>Path</span>
+      <input type="text" name="path" id="f-path" value="/" placeholder="/users/123" />
+    </label>
+    <label class="plugin-form-row-full">
+      <span>JSON body (optional, for POST/PUT/PATCH)</span>
+      <textarea name="body" id="f-body" rows="5" placeholder='{"hello": "world"}'></textarea>
+    </label>
+    <div class="plugin-form-row-full plugin-form-actions">
+      <button type="button" class="primary" id="btn-send">Send</button>
+    </div>
+  </form>
+  <pre class="plugin-output" id="request-output" hidden></pre>
+</section>
+
+<section class="plugin-section">
+  <h2>XSS payload generator</h2>
+  <p class="muted small">Generates portable XSS payloads suitable for breaking out of an unescaped string context. Provide one or more webhook URLs to receive the exfiltrated data.</p>
+  <form class="plugin-form" id="payload-form" autocomplete="off">
+    <label>
+      <span>Kind</span>
+      <select id="f-kind">
+        {% for k, label in payload_kinds.items() %}
+          <option value="{{ k }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>BeEF hook URL (only for "BeEF hook")</span>
+      <input type="url" id="f-hook-url" placeholder="https://hook.example.com/banana.js" />
+    </label>
+    <label class="plugin-form-row-full">
+      <span>Webhooks (one per line)</span>
+      <textarea id="f-webhooks" rows="3" placeholder="https://discord.com/api/webhooks/.../..."></textarea>
+    </label>
+    <div class="plugin-form-row-full plugin-form-actions">
+      <button type="button" class="primary" id="btn-build">Build payload</button>
+      <button type="button" class="ghost" id="btn-copy" disabled>Copy</button>
+    </div>
+  </form>
+  <pre class="plugin-output" id="payload-output" hidden></pre>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function show(el, text) {
+    el.hidden = false;
+    el.textContent = typeof text === "string" ? text : JSON.stringify(text, null, 2);
+  }
+  async function fetchJSON(url, opts) {
+    const r = await fetch(url, opts);
+    let data;
+    try { data = await r.json(); } catch { data = { ok: false, error: r.statusText }; }
+    return { status: r.status, data };
+  }
+
+  function readConnectForm() {
+    return {
+      db_url: $("f-db-url").value.trim(),
+      api_key: $("f-api-key").value.trim(),
+    };
+  }
+
+  $("btn-test").addEventListener("click", async () => {
+    const out = $("connect-output");
+    show(out, "Testing...");
+    const { data } = await fetchJSON("/plugins/firebase/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(readConnectForm()),
+    });
+    show(out, data);
+  });
+
+  $("btn-dump").addEventListener("click", async () => {
+    const { db_url, api_key } = readConnectForm();
+    if (!db_url) { show($("connect-output"), "db_url is required"); return; }
+    const fd = new FormData();
+    fd.set("db_url", db_url);
+    if (api_key) fd.set("api_key", api_key);
+    const r = await fetch("/plugins/firebase/dump", { method: "POST", body: fd });
+    if (!r.ok) {
+      let msg;
+      try { msg = await r.json(); } catch { msg = { error: r.statusText }; }
+      show($("connect-output"), msg);
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "firebase_dump.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    show($("connect-output"), "Dump downloaded.");
+  });
+
+  $("btn-restore").addEventListener("click", () => $("restore-file").click());
+  $("restore-file").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const { db_url, api_key } = readConnectForm();
+    if (!db_url) { show($("connect-output"), "db_url is required"); return; }
+    const fd = new FormData();
+    fd.set("db_url", db_url);
+    if (api_key) fd.set("api_key", api_key);
+    fd.set("path", "/");
+    fd.set("file", file);
+    show($("connect-output"), "Restoring...");
+    const { data } = await fetchJSON("/plugins/firebase/restore", { method: "POST", body: fd });
+    show($("connect-output"), data);
+    ev.target.value = "";
+  });
+
+  $("btn-send").addEventListener("click", async () => {
+    const out = $("request-output");
+    show(out, "Sending...");
+    const { data } = await fetchJSON("/plugins/firebase/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...readConnectForm(),
+        method: $("f-method").value,
+        path: $("f-path").value,
+        body: $("f-body").value,
+      }),
+    });
+    show(out, data);
+  });
+
+  let lastPayload = "";
+  $("btn-build").addEventListener("click", async () => {
+    const webhooks = $("f-webhooks").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const body = {
+      kind: $("f-kind").value,
+      webhooks,
+      hook_url: $("f-hook-url").value.trim(),
+    };
+    const { data } = await fetchJSON("/plugins/firebase/payload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    show($("payload-output"), data);
+    if (data && data.ok && data.payload) {
+      lastPayload = data.payload;
+      $("btn-copy").disabled = false;
+    } else {
+      lastPayload = "";
+      $("btn-copy").disabled = true;
+    }
+  });
+
+  $("btn-copy").addEventListener("click", async () => {
+    if (!lastPayload) return;
+    try {
+      await navigator.clipboard.writeText(lastPayload);
+      const btn = $("btn-copy");
+      const old = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    } catch (e) {
+      show($("payload-output"), "Copy failed: " + e.message);
+    }
+  });
+})();
+</script>
+{% endblock %}

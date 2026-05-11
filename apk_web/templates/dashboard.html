@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>APK Wooper — Dashboard</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-title">APK Wooper</span>
+          <div class="brand-actions">
+            <button id="jobs-modal-btn" type="button" class="ghost small icon-button" title="Jobs &amp; logs" aria-label="Jobs and logs">&#9776;</button>
+            <button id="settings-btn" type="button" class="ghost small icon-button" title="Settings" aria-label="Settings">&#9881;</button>
+            <form method="post" action="{{ url_for('pages.logout') }}" class="inline">
+              <button type="submit" class="ghost small">Sign out</button>
+            </form>
+          </div>
+        </div>
+
+        <section class="panel">
+          <h2>Upload</h2>
+          <div id="dropzone" class="dropzone" tabindex="0">
+            <p>Drag & drop an <strong>.apk</strong> here</p>
+            <p class="muted small">or click to choose a file</p>
+            <input id="file-input" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
+          </div>
+          <p id="upload-status" class="muted small"></p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Plugins</h2>
+            <a id="plugins-index-link" href="/plugins/" class="ghost small">All</a>
+          </div>
+          <div id="plugin-list" class="plugin-sidebar-list muted small">Loading...</div>
+        </section>
+
+        <section class="panel grow">
+          <div class="panel-head">
+            <h2>Jobs</h2>
+            <button id="refresh-jobs" type="button" class="ghost small">Refresh</button>
+          </div>
+          <input id="job-search" type="search" class="search-input" placeholder="Filter jobs..." aria-label="Filter jobs" />
+          <p id="job-search-status" class="muted small search-status"></p>
+          <div id="job-list" class="job-list"></div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="toolbar">
+          <div class="toolbar-left">
+            <span id="job-title" class="job-title">Select a job</span>
+            <span id="job-badge" class="badge muted"></span>
+          </div>
+          <div class="toolbar-right">
+            <button id="btn-log" type="button" class="ghost" disabled>Log</button>
+            <button id="btn-download" type="button" class="ghost" disabled>Download ZIP</button>
+            <button id="btn-delete" type="button" class="danger ghost" disabled>Delete job</button>
+          </div>
+        </header>
+
+        <div class="workspace">
+          <div id="tree-pane" class="tree-pane">
+            <div class="tree-controls">
+              <input id="tree-search" type="search" class="search-input" placeholder="Filter files..." aria-label="Filter files" disabled />
+              <p id="tree-search-status" class="muted small search-status"></p>
+            </div>
+            <div id="tree-progress" class="tree-progress hidden">
+              <div id="tree-progress-text" class="tree-progress-text muted small">Loading...</div>
+              <div class="progress">
+                <div id="tree-progress-bar" class="progress-bar indeterminate"></div>
+              </div>
+            </div>
+            <div id="tree-root" class="tree-root muted small">Select a job to load the file tree.</div>
+          </div>
+          <div class="editor-pane">
+            <div class="pane-tabs" role="tablist">
+              <button type="button" class="pane-tab active" data-pane-tab="editor" role="tab" aria-selected="true">
+                <span>Editor</span>
+              </button>
+              <button type="button" class="pane-tab" data-pane-tab="analysis" role="tab" aria-selected="false" disabled>
+                <span>Analysis</span>
+                <span id="analysis-tab-badge" class="pane-tab-badge hidden">0</span>
+              </button>
+            </div>
+
+            <section class="pane-section" data-pane-section="editor">
+              <div id="tabs" class="tabs"></div>
+              <div id="editor-status" class="editor-status muted small"></div>
+              <div id="editor-mount" class="editor-mount"></div>
+            </section>
+
+            <section class="pane-section hidden" data-pane-section="analysis">
+              <div class="analysis-toolbar">
+                <div class="analysis-toolbar-row">
+                  <button id="analysis-rerun" type="button" class="ghost small" disabled>Re-run analysis</button>
+                  <div class="analysis-export">
+                    <button type="button" class="ghost small" data-export="json" disabled>JSON</button>
+                    <button type="button" class="ghost small" data-export="csv" disabled>CSV</button>
+                    <button type="button" class="ghost small" data-export="sarif" disabled>SARIF</button>
+                  </div>
+                </div>
+                <span id="analysis-status-text" class="muted small"></span>
+                <div id="analysis-progress" class="analysis-progress hidden">
+                  <div id="analysis-progress-phase" class="muted small">Starting…</div>
+                  <div class="progress">
+                    <div id="analysis-progress-bar" class="progress-bar"></div>
+                  </div>
+                  <div id="analysis-progress-text" class="muted small">0 / 0 files</div>
+                </div>
+                <details id="analysis-log-wrap" class="analysis-log-wrap hidden">
+                  <summary>
+                    <span class="analysis-log-summary-label">Live log</span>
+                    <span id="analysis-log-meta" class="muted small"></span>
+                  </summary>
+                  <pre id="analysis-log" class="analysis-log" aria-live="polite"></pre>
+                </details>
+              </div>
+              <div class="analysis-scroll">
+                <div id="analysis-summary" class="analysis-summary"></div>
+                <div class="analysis-filters">
+                  <select id="analysis-severity" aria-label="Filter by severity">
+                    <option value="">All severities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="info">Info</option>
+                  </select>
+                  <select id="analysis-category" aria-label="Filter by category">
+                    <option value="">All categories</option>
+                    <option value="secret">Secrets</option>
+                    <option value="network">Network</option>
+                    <option value="manifest">Manifest</option>
+                    <option value="crypto">Crypto</option>
+                    <option value="auth">Auth</option>
+                    <option value="sdk">SDK</option>
+                    <option value="native">Native</option>
+                  </select>
+                  <input id="analysis-search" type="search" class="search-input" placeholder="Search findings..." aria-label="Search findings" />
+                </div>
+                <p id="analysis-empty" class="muted small">Select a finished job to view analysis.</p>
+                <div id="analysis-list" class="analysis-list"></div>
+                <div id="analysis-load-more-wrap" class="analysis-load-more-wrap hidden">
+                  <button id="analysis-load-more" type="button" class="ghost small">Load more</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="modal" class="modal" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title" class="modal-title"></h2>
+        <button type="button" class="modal-close ghost small" data-modal-close aria-label="Close">x</button>
+      </div>
+      <div class="modal-body"></div>
+      <div class="modal-foot"></div>
+    </dialog>
+
+    <dialog id="jobs-modal" class="modal jobs-modal" aria-labelledby="jobs-modal-title">
+      <div class="modal-head">
+        <h2 id="jobs-modal-title" class="modal-title">Jobs &amp; logs</h2>
+        <button type="button" class="modal-close ghost small" data-jobs-close aria-label="Close">x</button>
+      </div>
+      <div class="modal-body jobs-modal-body">
+        <div class="jobs-modal-grid">
+          <aside class="jobs-modal-side">
+            <div class="jobs-pane-toolbar">
+              <button id="jobs-pane-refresh" type="button" class="ghost small">Refresh jobs</button>
+              <input id="jobs-pane-search" type="search" class="search-input" placeholder="Filter jobs..." aria-label="Filter jobs" />
+            </div>
+            <div id="jobs-pane-list" class="jobs-pane-list muted small">No jobs loaded.</div>
+          </aside>
+          <section class="jobs-log-panel">
+            <div class="jobs-log-head">
+              <span id="jobs-log-title" class="jobs-log-title">Select a job to view its log</span>
+              <button id="jobs-log-refresh" type="button" class="ghost small" disabled>Refresh log</button>
+            </div>
+            <pre id="jobs-log-text" class="jobs-log-text"></pre>
+          </section>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="primary" data-jobs-close>Done</button>
+      </div>
+    </dialog>
+
+    <dialog id="settings-modal" class="modal settings-modal" aria-labelledby="settings-title">
+      <div class="modal-head">
+        <h2 id="settings-title" class="modal-title">Settings</h2>
+        <button type="button" class="modal-close ghost small" data-settings-close aria-label="Close">x</button>
+      </div>
+      <div class="modal-body settings-body">
+        <section class="settings-section">
+          <div class="panel-head">
+            <h2>Java runtimes</h2>
+            <button id="refresh-java" type="button" class="ghost small">Scan</button>
+          </div>
+          <p class="muted small settings-copy">
+            The decompiler uses the selected Java runtime for JADX and Apktool. Scan again after installing or changing JDKs.
+          </p>
+          <p id="java-note" class="muted small"></p>
+          <p id="java-selected" class="small"></p>
+          <div id="java-list" class="java-list"></div>
+        </section>
+
+        <section class="settings-section">
+          <div class="panel-head">
+            <h2>Analysis engine extras</h2>
+            <button id="refresh-tools" type="button" class="ghost small">Refresh</button>
+          </div>
+          <p class="muted small settings-copy">
+            Optional secret scanners run in addition to the built-in detectors. Enable a scanner and install its binary; toggles take effect from the next analysis run.
+          </p>
+          <div id="analysis-tools-list" class="analysis-tools-list"></div>
+        </section>
+
+        <section class="settings-section">
+          <div class="panel-head">
+            <h2>Plugins</h2>
+            <button id="refresh-plugins-settings" type="button" class="ghost small">Refresh</button>
+          </div>
+          <p class="muted small settings-copy">
+            Built-in plugins live under <code>apk_web/plugins/</code>. External Flask apps can be mounted by absolute path; they appear in the sidebar and are reachable at <code>/plugins/&lt;id&gt;</code>. Adding or removing external plugins requires a server restart.
+          </p>
+          <div id="plugins-settings-list" class="plugins-settings-list"></div>
+          <details id="plugins-add-wrap" class="plugins-add-wrap">
+            <summary>Add external plugin</summary>
+            <form id="plugins-add-form" class="plugins-add-form">
+              <label>
+                <span>ID (slug)</span>
+                <input type="text" id="plg-id" placeholder="gmap" required />
+              </label>
+              <label>
+                <span>Display name</span>
+                <input type="text" id="plg-name" placeholder="Google Maps Toolkit" />
+              </label>
+              <label class="full">
+                <span>External path (added to sys.path)</span>
+                <input type="text" id="plg-path" placeholder="C:\path\to\parent\of\package" />
+              </label>
+              <label>
+                <span>Module</span>
+                <input type="text" id="plg-module" placeholder="gmap_web" />
+              </label>
+              <label>
+                <span>Blueprint attr</span>
+                <input type="text" id="plg-bp" value="bp" />
+              </label>
+              <label>
+                <span>Mode</span>
+                <select id="plg-mode">
+                  <option value="iframe">iframe</option>
+                  <option value="native">native</option>
+                </select>
+              </label>
+              <label>
+                <span>Accepts (comma-separated rule ids)</span>
+                <input type="text" id="plg-accepts" placeholder="secret.google_api_key" />
+              </label>
+              <div class="full plugins-add-actions">
+                <button type="submit" class="primary small">Add</button>
+                <span id="plg-add-status" class="muted small"></span>
+              </div>
+            </form>
+          </details>
+        </section>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="primary" data-settings-close>Done</button>
+      </div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/loader.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+  </body>
+</html>
