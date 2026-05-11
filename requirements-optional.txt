@@ -1,0 +1,32 @@
+# Optional dependencies that unlock extra analysis features and plugin
+# integrations. Install all of them with:
+#
+#   pip install -r requirements-optional.txt
+#
+# Or install individually via the dashboard buttons in
+# Settings -> Analysis engine and Settings -> Plugins.
+
+# -----------------------------------------------------------------------------
+# Analysis engine
+# -----------------------------------------------------------------------------
+
+# APKiD: fingerprints packers, obfuscators, anti-VM tricks and the original
+# compiler on the raw APK. Pure-Python wrapper around YARA. On Python 3.13+
+# the dependency `yara-python-dex` has no prebuilt wheel and its sdist on
+# PyPI is broken; use the dashboard's "Install via GitHub source" button or
+# the manual sequence:
+#
+#   pip install --upgrade setuptools wheel
+#   pip install --no-build-isolation \
+#       git+https://github.com/MobSF/yara-python-dex.git
+#   pip install apkid
+#
+apkid
+
+# -----------------------------------------------------------------------------
+# Plugin extras
+# -----------------------------------------------------------------------------
+# (None of the built-in plugins currently require pip packages outside of
+# Flask/Werkzeug. External plugins should declare their own dependencies via
+# the `pip_requires` field in their Plugin manifest, which lets the dashboard
+# show + install them for the user.)

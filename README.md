@@ -86,6 +86,7 @@ Three external tools can be enabled from the **Settings → Analysis engine extr
 | Gitleaks | `ENABLE_GITLEAKS=1` | Auto-installable from the Settings UI (downloads from upstream GitHub releases into `tools/gitleaks/`) |
 | TruffleHog | `ENABLE_TRUFFLEHOG=1` | Auto-installable; verified findings are bumped to high severity |
 | radare2 | `ENABLE_RADARE2=1` | Auto-installable on Windows from the official portable ZIP into `tools/radare2/`; also works with any `r2` already on `PATH`; enriches `.so` analysis with imports/exports |
+| APKiD | `ENABLE_APKID=1` | Pure-Python; the Settings UI offers a one-click `pip install apkid` plus a fallback **Install via GitHub source** button for Python 3.13+ where prebuilt `yara-python-dex` wheels are missing (it installs `setuptools`+`wheel`, then builds `yara-python-dex` from its GitHub repo with `--no-build-isolation`, then installs `apkid`). Fingerprints **packers**, **obfuscators**, **anti-VM / anti-debug** tricks, and the **original compiler** on the raw `input.apk`. Refresh signatures occasionally with `apkid -u`. |
 
 Toggles take effect from the next analysis run (use **Re-run analysis** to apply immediately).
 
@@ -109,6 +110,41 @@ The dashboard supports **plugins** — small Flask blueprints (or whole Flask ap
 | ID | Description |
 | --- | --- |
 | `firebase` | Test Firebase Realtime Database endpoints discovered in decompiled APKs: connection check, full DB dump, restore from JSON, run custom REST requests, and generate copy-pasteable XSS payloads (LocalStorage dump, keylogger, fake login overlay, BeEF hook). |
+| `mobsf` | Send the current job's APK to an external [Mobile Security Framework (MobSF)](https://github.com/MobSF/Mobile-Security-Framework-MobSF) instance over REST and embed the report iframe directly in the dashboard. See [MobSF](#mobsf) below. |
+
+### MobSF
+
+The MobSF plugin **does not bundle** MobSF itself — APK Wooper talks to a separately-running MobSF over HTTP. When MobSF is unreachable, `/plugins/mobsf` exposes a **GitHub installer panel** with three buttons that drive the upstream install steps as a normal user process (no admin / root, no Docker):
+
+1. **Clone repo** — `git clone https://github.com/MobSF/Mobile-Security-Framework-MobSF.git` into `tools/mobsf/Mobile-Security-Framework-MobSF` (or `git pull` if already cloned).
+2. **Run setup** — runs `setup.sh` / `setup.bat` inside the clone (creates MobSF's own venv and installs its Python deps; can take several minutes).
+3. **Start MobSF** — spawns `run.sh 127.0.0.1:<port>` / `run.bat 127.0.0.1:<port>` as a detached child; the PID and host port are persisted in `tools/mobsf/.apk_wooper_mobsf_state.json` so the panel can show **running / stopped** status across dashboard restarts.
+
+A **Stop** button kills the tracked PID, and **Show run.log** tails the last 16 KiB of MobSF's stdout/stderr for quick debugging.
+
+Equivalent shell-only flow if you'd rather drive it yourself:
+
+```bash
+git clone https://github.com/MobSF/Mobile-Security-Framework-MobSF.git
+cd Mobile-Security-Framework-MobSF
+./setup.sh   # setup.bat on Windows
+./run.sh 127.0.0.1:8000
+```
+
+Once MobSF is up, copy the API key from its **Settings → API Docs** page and either:
+
+* paste it into the form at `/plugins/mobsf` (persisted to `instance/mobsf.json`), or
+* set `MOBSF_URL` and `MOBSF_API_KEY` as env vars before booting APK Wooper.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ENABLE_MOBSF` | `true` | Master switch for the plugin (hides the toolbar button and `/plugins/mobsf` page when off) |
+| `MOBSF_URL` | `http://localhost:8000` | Base URL of the running MobSF instance |
+| `MOBSF_API_KEY` | empty | MobSF API key (sent as raw `Authorization` header on every REST call) |
+
+A **Scan in MobSF** button appears on the job toolbar whenever MobSF is reachable. Clicking it uploads `input.apk` via `/api/v1/upload` + `/api/v1/scan` and redirects to `/plugins/mobsf?hash=<sha>` which deep-links the embedded report. Findings whose `rule_id` starts with `apkid.packer`, `apkid.obfuscator`, `apkid.anti_vm`, or matches a known secret get an **"Open in MobSF"** action on the finding card.
+
+> **Caveat:** MobSF must be reachable over HTTP from the machine running APK Wooper. The plugin uses only stdlib `urllib` — no extra Python deps — and never starts MobSF for you.
 
 ### `plugins.json`
 

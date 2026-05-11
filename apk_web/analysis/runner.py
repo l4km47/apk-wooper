@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import logging
 import threading
 from pathlib import Path
@@ -76,6 +77,16 @@ def _resolve_scanners(app: Flask) -> List[Scanner]:
             scanners.append(Radare2Scanner(binary))
         else:
             _LOG.info("ENABLE_RADARE2=1 but r2 binary not found; skipping.")
+
+    if bool(cfg.get("ENABLE_APKID", False)):
+        if importlib.util.find_spec("apkid") is not None:
+            from apk_web.analysis.scanners.apkid import ApkidScanner
+
+            scanners.append(ApkidScanner())
+        else:
+            _LOG.info(
+                "ENABLE_APKID=1 but the 'apkid' package is not installed; skipping."
+            )
 
     return scanners
 

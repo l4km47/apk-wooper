@@ -1618,6 +1618,43 @@ a.button[aria-disabled="true"] {
   word-break: break-all;
 }
 
+.analysis-tool-log {
+  margin-top: 8px;
+  max-height: 260px;
+  overflow: auto;
+  background: #0b0e14;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #cfd6e4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.analysis-tool-hint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 178, 56, 0.42);
+  background: rgba(255, 178, 56, 0.08);
+  color: #f5d28b;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.analysis-tool-force-source,
+.analysis-tool-git-source {
+  margin-top: 6px;
+  margin-left: 6px;
+}
+
+.analysis-tool-git-source {
+  border-color: rgba(55, 148, 255, 0.4);
+}
+
 /* Jobs / logs modal */
 .jobs-modal {
   width: min(1100px, 92vw);
@@ -1887,6 +1924,85 @@ a.button[aria-disabled="true"] {
   margin: 4px 0 0 18px;
   padding: 0;
 }
+
+.plugin-deps-box {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plugin-deps-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.plugin-deps-head strong { font-size: 13px; }
+
+.plugin-deps-head button { margin-left: auto; }
+
+.plugin-deps-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-deps-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.plugin-deps-row.missing {
+  background: rgba(244, 71, 71, 0.06);
+  border-color: rgba(244, 71, 71, 0.25);
+}
+
+.plugin-deps-row.ok {
+  background: rgba(70, 200, 120, 0.05);
+  border-color: rgba(70, 200, 120, 0.25);
+}
+
+.plugin-deps-state {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.plugin-deps-row.missing .plugin-deps-state { color: #ff9b9b; }
+.plugin-deps-row.ok .plugin-deps-state { color: #b3f0c5; }
+
+.plugin-deps-pip code { font-size: 11px; }
+
+.plugin-deps-log {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  background: #0b0e14;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #cfd6e4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plugin-deps-log.hidden { display: none; }
 
 .plugins-add-wrap {
   margin-top: 10px;

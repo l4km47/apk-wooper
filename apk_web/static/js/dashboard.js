@@ -36,6 +36,7 @@ const jobTitle = document.getElementById("job-title");
 const jobBadge = document.getElementById("job-badge");
 const btnLog = document.getElementById("btn-log");
 const btnDownload = document.getElementById("btn-download");
+const btnMobsfScan = document.getElementById("btn-mobsf-scan");
 const btnDelete = document.getElementById("btn-delete");
 
 const treeRoot = document.getElementById("tree-root");
@@ -461,12 +462,14 @@ const TOOL_LABELS = {
   gitleaks: "Gitleaks",
   trufflehog: "TruffleHog",
   radare2: "radare2 / r2",
+  apkid: "APKiD",
 };
 
 const TOOL_DESCRIPTIONS = {
   gitleaks: "Pattern-driven secret scanner that runs over the decompiled tree.",
   trufflehog: "Detector-based secret scanner; high signal on common API keys.",
   radare2: "Binary RE toolkit; pulls imports/exports/entries from each .so.",
+  apkid: "Fingerprints packers, obfuscators, anti-VM/anti-debug, and the original compiler on the raw APK.",
 };
 
 async function loadAnalysisTools() {
@@ -496,11 +499,15 @@ async function loadAnalysisTools() {
     titleWrap.appendChild(name);
     const state = document.createElement("span");
     state.className = "analysis-tool-state";
-    state.textContent = t.installed
-      ? "Installed"
-      : t.auto_install
-        ? "Not installed"
-        : "Not on PATH";
+    if (t.installed) {
+      state.textContent = "Installed";
+    } else if (t.kind === "python_package") {
+      state.textContent = "Not installed (pip)";
+    } else if (t.auto_install) {
+      state.textContent = "Not installed";
+    } else {
+      state.textContent = "Not on PATH";
+    }
     state.classList.add(t.installed ? "ok" : "warn");
     titleWrap.appendChild(state);
     top.appendChild(titleWrap);
@@ -541,12 +548,177 @@ async function loadAnalysisTools() {
       row.appendChild(bp);
     }
 
-    if (t.auto_install && !t.installed) {
+    const canAutoInstall = t.auto_install || t.kind === "python_package";
+    if (canAutoInstall && !t.installed) {
       const install = document.createElement("button");
       install.type = "button";
       install.className = "ghost small";
-      install.textContent = "Install";
+      install.textContent =
+        t.kind === "python_package" ? "Install via pip" : "Install";
+
+      let logEl = null;
+      let hintEl = null;
+      let gitSourceBtn = null;
+      let forceSourceBtn = null;
+
+      function ensureLog() {
+        if (logEl) return logEl;
+        logEl = document.createElement("pre");
+        logEl.className = "analysis-tool-log";
+        row.appendChild(logEl);
+        return logEl;
+      }
+      function appendLog(text) {
+        const el = ensureLog();
+        el.textContent += text;
+        el.scrollTop = el.scrollHeight;
+      }
+      function showHint(text) {
+        if (!hintEl) {
+          hintEl = document.createElement("p");
+          hintEl.className = "analysis-tool-hint";
+          row.appendChild(hintEl);
+        }
+        hintEl.textContent = text;
+      }
+
+      const APKID_HINTS = {
+        yara_python_dex_sdist_bug:
+          "APKiD's dependency 'yara-python-dex' has a broken sdist on PyPI. Click \"Install via GitHub source\" below to build it from the git repo with --no-build-isolation.",
+        missing_build_backend:
+          "Your Python 3.14 venv has no setuptools. The GitHub-source strategy below installs setuptools+wheel first, then builds yara-python-dex from git. Click \"Install via GitHub source\".",
+        no_wheel:
+          "No prebuilt APKiD wheel for your interpreter. Try \"Install via GitHub source\" or downgrade to Python 3.11/3.12.",
+        permission_denied:
+          "pip can't write to site-packages. Use a virtualenv or grant write access to the install user.",
+        network: "pip could not reach PyPI; check your network/proxy.",
+        git_missing:
+          "git is required for the GitHub source strategy. Install Git from https://git-scm.com/download and retry.",
+      };
+
+      function ensureGitSourceButton() {
+        if (gitSourceBtn) return gitSourceBtn;
+        gitSourceBtn = document.createElement("button");
+        gitSourceBtn.type = "button";
+        gitSourceBtn.className =
+          "ghost small analysis-tool-git-source";
+        gitSourceBtn.textContent = "Install via GitHub source";
+        gitSourceBtn.title =
+          "Installs setuptools+wheel, then builds yara-python-dex from its GitHub repo, then apkid";
+        gitSourceBtn.addEventListener("click", () =>
+          runPipStream({ strategy: "git_source" })
+        );
+        row.appendChild(gitSourceBtn);
+        return gitSourceBtn;
+      }
+
+      function ensureForceSourceButton() {
+        if (forceSourceBtn) return forceSourceBtn;
+        forceSourceBtn = document.createElement("button");
+        forceSourceBtn.type = "button";
+        forceSourceBtn.className =
+          "ghost small analysis-tool-force-source";
+        forceSourceBtn.textContent = "Force plain source build";
+        forceSourceBtn.title =
+          "Skip --only-binary and let pip attempt the broken PyPI sdist anyway";
+        forceSourceBtn.addEventListener("click", () =>
+          runPipStream({ strategy: "source" })
+        );
+        row.appendChild(forceSourceBtn);
+        return forceSourceBtn;
+      }
+
+      async function runPipStream(opts) {
+        const strategy = (opts && opts.strategy) || "auto";
+        const allButtons = [install, gitSourceBtn, forceSourceBtn].filter(Boolean);
+        allButtons.forEach((b) => (b.disabled = true));
+        install.textContent = strategy === "git_source"
+          ? "Building from GitHub…"
+          : strategy === "source"
+            ? "Building from PyPI sdist…"
+            : "Installing…";
+        if (logEl) logEl.textContent = "";
+        if (hintEl) hintEl.textContent = "";
+        try {
+          const res = await fetch(
+            "/api/analysis/tools/apkid/install/stream",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ strategy }),
+            }
+          );
+          if (!res.ok || !res.body) {
+            appendLog(`[client] HTTP ${res.status}\n`);
+            allButtons.forEach((b) => (b.disabled = false));
+            install.textContent = "Retry install";
+            return;
+          }
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buffered = "";
+          let resultLine = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffered += dec.decode(value, { stream: true });
+            const lines = buffered.split("\n");
+            buffered = lines.pop() || "";
+            for (const ln of lines) {
+              appendLog(ln + "\n");
+              if (ln.startsWith("[result ")) resultLine = ln;
+            }
+          }
+          if (buffered) appendLog(buffered);
+          if (resultLine.startsWith("[result ok")) {
+            await loadAnalysisTools();
+            return;
+          }
+
+          const kind = (resultLine.match(/error\s+([\w_]+)/) || [])[1] || "error";
+          showHint(APKID_HINTS[kind] || "pip install failed; see the log above.");
+          allButtons.forEach((b) => (b.disabled = false));
+          install.textContent = "Retry install";
+
+          if (key === "apkid") {
+            const wantsGit =
+              kind === "yara_python_dex_sdist_bug" ||
+              kind === "missing_build_backend" ||
+              kind === "no_wheel";
+            if (wantsGit) {
+              ensureGitSourceButton();
+              // For wheel-only failures that can only be solved by building
+              // yara-python-dex from git (missing setuptools, no wheel on
+              // this interpreter, or pip's resolver couldn't satisfy the
+              // dep graph), auto-retry with the GitHub strategy once.
+              if (
+                strategy === "auto" &&
+                (kind === "missing_build_backend" || kind === "no_wheel")
+              ) {
+                appendLog(
+                  "[client] no compatible wheel for this Python; " +
+                    "retrying with GitHub-source strategy in 1s...\n"
+                );
+                setTimeout(() => runPipStream({ strategy: "git_source" }), 1000);
+                return;
+              }
+            }
+            if (kind === "yara_python_dex_sdist_bug" && strategy !== "source") {
+              ensureForceSourceButton();
+            }
+          }
+        } catch (e) {
+          appendLog(`[client] ${e.message || e}\n`);
+          allButtons.forEach((b) => (b.disabled = false));
+          install.textContent = "Retry install";
+        }
+      }
+
       install.addEventListener("click", async () => {
+        if (t.kind === "python_package" && key === "apkid") {
+          await runPipStream({ strategy: "auto" });
+          return;
+        }
         install.disabled = true;
         install.textContent = "Installing…";
         try {
@@ -559,10 +731,18 @@ async function loadAnalysisTools() {
         } catch (e) {
           await showAlert("Install failed", String(e.message || e));
           install.disabled = false;
-          install.textContent = "Install";
+          install.textContent =
+            t.kind === "python_package" ? "Install via pip" : "Install";
         }
       });
       row.appendChild(install);
+
+      if (t.install_command) {
+        const cmd = document.createElement("p");
+        cmd.className = "muted small analysis-tool-path";
+        cmd.textContent = `Manual: ${t.install_command}`;
+        row.appendChild(cmd);
+      }
     }
 
     analysisToolsList.appendChild(row);
@@ -591,6 +771,8 @@ function pluginAcceptsRule(ruleId) {
   return _pluginsCache.filter((p) => (p.accepts || []).includes(ruleId));
 }
 
+let _pluginsDepsCache = [];
+
 async function loadPlugins() {
   let data;
   try {
@@ -603,6 +785,15 @@ async function loadPlugins() {
   _pluginsLoadErrors = Array.isArray(data?.errors) ? data.errors : [];
   renderPluginSidebar();
   renderPluginsSettings();
+  // Fetch dependencies separately so the page still works if this fails.
+  fetchJSON("/api/plugins/dependencies")
+    .then((d) => {
+      _pluginsDepsCache = Array.isArray(d?.dependencies) ? d.dependencies : [];
+      renderPluginsSettings();
+    })
+    .catch(() => {
+      _pluginsDepsCache = [];
+    });
   if (typeof refreshAnalysisListInPlace === "function") {
     refreshAnalysisListInPlace();
   }
@@ -634,9 +825,132 @@ function renderPluginSidebar() {
   }
 }
 
+function renderPluginsDeps() {
+  if (!pluginsSettingsListEl) return;
+  if (!Array.isArray(_pluginsDepsCache) || !_pluginsDepsCache.length) return;
+
+  const missing = _pluginsDepsCache.filter((d) => !d.installed);
+  const installed = _pluginsDepsCache.filter((d) => d.installed);
+
+  const wrap = document.createElement("div");
+  wrap.className = "plugin-deps-box";
+
+  const head = document.createElement("div");
+  head.className = "plugin-deps-head";
+  head.innerHTML = `
+    <strong>Plugin dependencies</strong>
+    <span class="muted small">${missing.length} missing &middot; ${installed.length} installed</span>
+  `;
+  wrap.appendChild(head);
+
+  if (!_pluginsDepsCache.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted small";
+    empty.textContent = "No plugins declare optional pip dependencies.";
+    wrap.appendChild(empty);
+    pluginsSettingsListEl.appendChild(wrap);
+    return;
+  }
+
+  if (missing.length) {
+    const installAll = document.createElement("button");
+    installAll.type = "button";
+    installAll.className = "primary small";
+    installAll.textContent = `Install all (${missing.length})`;
+    installAll.addEventListener("click", () =>
+      installPluginDeps(missing.map((d) => d.pip), installAll)
+    );
+    head.appendChild(installAll);
+  }
+
+  const table = document.createElement("div");
+  table.className = "plugin-deps-table";
+  for (const dep of _pluginsDepsCache) {
+    const row = document.createElement("div");
+    row.className = "plugin-deps-row " + (dep.installed ? "ok" : "missing");
+    row.innerHTML = `
+      <span class="plugin-deps-state">${dep.installed ? "installed" : "missing"}</span>
+      <span class="plugin-deps-pip"><code>${escapeHtml(dep.pip)}</code></span>
+      <span class="plugin-deps-plugin muted small">${escapeHtml(dep.plugin_name)}</span>
+    `;
+    if (!dep.installed) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost small";
+      btn.textContent = "Install";
+      btn.addEventListener("click", () => installPluginDeps([dep.pip], btn));
+      row.appendChild(btn);
+    }
+    table.appendChild(row);
+  }
+  wrap.appendChild(table);
+
+  const log = document.createElement("pre");
+  log.className = "plugin-deps-log hidden";
+  log.id = "plugin-deps-log";
+  wrap.appendChild(log);
+
+  pluginsSettingsListEl.appendChild(wrap);
+}
+
+async function installPluginDeps(packages, button) {
+  if (!Array.isArray(packages) || !packages.length) return;
+  const logEl = document.getElementById("plugin-deps-log");
+  const showLog = (text, replace) => {
+    if (!logEl) return;
+    logEl.classList.remove("hidden");
+    if (replace) logEl.textContent = "";
+    logEl.textContent += text;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+  const prevLabel = button ? button.textContent : "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Installing…";
+  }
+  showLog(`[client] installing: ${packages.join(", ")}\n`, true);
+  try {
+    const res = await fetch("/api/plugins/dependencies/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packages }),
+    });
+    if (!res.ok || !res.body) {
+      let body = null;
+      try { body = await res.json(); } catch (_) { /* noop */ }
+      showLog(`[client] HTTP ${res.status}: ${body?.error || "request failed"}\n`);
+      if (body?.disallowed) showLog(`[client] disallowed: ${body.disallowed.join(", ")}\n`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let last = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = dec.decode(value, { stream: true });
+      showLog(chunk);
+      last += chunk;
+    }
+    const ok = /\[result ok\]/.test(last);
+    if (ok) {
+      showLog("[client] reloading dependency status...\n");
+      await loadPlugins();
+    }
+  } catch (e) {
+    showLog(`[client] ${e?.message || e}\n`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = prevLabel || "Install";
+    }
+  }
+}
+
 function renderPluginsSettings() {
   if (!pluginsSettingsListEl) return;
   pluginsSettingsListEl.innerHTML = "";
+  renderPluginsDeps();
   if (!_pluginsCache.length && !_pluginsLoadErrors.length) {
     const empty = document.createElement("div");
     empty.className = "muted small";
@@ -954,6 +1268,7 @@ function setToolbarEnabled(enabled) {
   btnLog.disabled = !enabled;
   btnDelete.disabled = !enabled;
   btnDownload.disabled = !enabled;
+  if (btnMobsfScan) btnMobsfScan.disabled = !enabled || !_mobsfStatus.ok;
 }
 
 async function selectJob(jobId) {
@@ -2281,6 +2596,57 @@ btnDownload.addEventListener("click", () => {
   downloadJobZipWithProgress(selectedJobId, jobTitle.textContent).catch(() => {});
 });
 
+let _mobsfStatus = { ok: false, enabled: false, url: "", message: "" };
+
+async function refreshMobsfStatus() {
+  if (!btnMobsfScan) return;
+  try {
+    const data = await fetchJSON("/api/mobsf/status");
+    _mobsfStatus = data || { ok: false, enabled: false };
+  } catch (_e) {
+    _mobsfStatus = { ok: false, enabled: false };
+  }
+  if (_mobsfStatus.enabled) {
+    btnMobsfScan.classList.remove("hidden");
+    btnMobsfScan.title = _mobsfStatus.ok
+      ? `Send to ${_mobsfStatus.url}`
+      : `MobSF is not reachable (${_mobsfStatus.message || "configure URL"}); click to configure`;
+  } else {
+    btnMobsfScan.classList.add("hidden");
+  }
+  if (btnMobsfScan && !btnDownload.disabled) {
+    btnMobsfScan.disabled = !_mobsfStatus.ok;
+  }
+}
+
+async function sendCurrentJobToMobsf() {
+  if (!selectedJobId) return;
+  if (!_mobsfStatus.ok) {
+    window.location.assign("/plugins/mobsf");
+    return;
+  }
+  const prev = btnMobsfScan.textContent;
+  btnMobsfScan.disabled = true;
+  btnMobsfScan.textContent = "Sending to MobSF...";
+  try {
+    const res = await fetchJSON(`/plugins/mobsf/scan/${encodeURIComponent(selectedJobId)}`, {
+      method: "POST",
+    });
+    if (!res || !res.ok) {
+      throw new Error((res && res.error) || "MobSF scan failed");
+    }
+    window.location.assign(`/plugins/mobsf?hash=${encodeURIComponent(res.hash || "")}`);
+  } catch (e) {
+    await showAlert("MobSF scan failed", String(e.message || e));
+    btnMobsfScan.disabled = false;
+    btnMobsfScan.textContent = prev;
+  }
+}
+
+if (btnMobsfScan) {
+  btnMobsfScan.addEventListener("click", () => void sendCurrentJobToMobsf());
+}
+
 if (jobSearchInput) {
   jobSearchInput.addEventListener("input", () => renderJobs(filteredJobs()));
 }
@@ -2296,3 +2662,4 @@ setupDropzone();
 setupMonaco();
 loadJobs().catch(() => {});
 loadPlugins().catch(() => {});
+refreshMobsfStatus().catch(() => {});

@@ -1,0 +1,496 @@
+{% extends "plugins/plugin_base.html" %}
+
+{% block head_extra %}
+<style>
+  .mobsf-shell {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0;
+  }
+  .mobsf-shell .plugin-section { margin-bottom: 0; }
+  .mobsf-iframe-wrap {
+    flex: 1;
+    min-height: 480px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .mobsf-iframe-wrap iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: white;
+  }
+  .mobsf-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 12px;
+  }
+  .mobsf-banner.ok { border-color: rgba(70, 200, 120, 0.4); background: rgba(70, 200, 120, 0.06); }
+  .mobsf-banner.warn { border-color: rgba(244, 71, 71, 0.4); background: rgba(244, 71, 71, 0.06); }
+  .mobsf-banner-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    background: var(--muted);
+  }
+  .mobsf-banner.ok .mobsf-banner-dot { background: #4ade80; }
+  .mobsf-banner.warn .mobsf-banner-dot { background: #ff6b6b; }
+  .mobsf-snippet {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    overflow: auto;
+    white-space: pre;
+  }
+  .mobsf-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .mobsf-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .mobsf-pill strong { color: var(--text); font-weight: 600; }
+  .mobsf-pill.ok { border-color: rgba(70, 200, 120, 0.42); background: rgba(70, 200, 120, 0.08); color: #b3f0c5; }
+  .mobsf-pill.ok strong { color: #d6ffe1; }
+  .mobsf-pill.bad { border-color: rgba(244, 71, 71, 0.42); background: rgba(244, 71, 71, 0.08); color: #ffc8c8; }
+  .mobsf-pill.bad strong { color: #fff0f0; }
+  .mobsf-pill-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+  }
+  .mobsf-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .mobsf-actions .port-input {
+    width: 80px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 12px;
+  }
+  .mobsf-port-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .mobsf-log {
+    margin-top: 10px;
+    max-height: 280px;
+    overflow: auto;
+    background: #0b0e14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #cfd6e4;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .mobsf-log.hidden { display: none; }
+  .mobsf-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mobsf-section-head h2 { margin: 0; }
+</style>
+{% endblock %}
+
+{% block plugin_body %}
+<div class="mobsf-shell">
+  {% if status.ok %}
+    <div class="mobsf-banner ok">
+      <span class="mobsf-banner-dot"></span>
+      <strong>MobSF reachable</strong>
+      <span class="muted">{{ status.url }}</span>
+      <span class="muted small" style="margin-left:auto">{{ status.message }}</span>
+    </div>
+    <div class="mobsf-iframe-wrap">
+      <iframe src="{{ iframe_url }}" sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts" title="MobSF"></iframe>
+    </div>
+  {% else %}
+    <div class="mobsf-banner warn">
+      <span class="mobsf-banner-dot"></span>
+      <strong>MobSF is not reachable</strong>
+      <span class="muted small" style="margin-left:auto">{{ status.message }}</span>
+    </div>
+
+    <section class="plugin-section" id="mobsf-github-section">
+      <div class="mobsf-section-head">
+        <h2>Install from GitHub</h2>
+        <button type="button" class="ghost small" id="mobsf-github-refresh">Refresh status</button>
+      </div>
+      <p class="muted small">
+        APK Wooper can clone MobSF, run its setup script, and launch it as a normal user process.
+        No admin / root required &mdash; everything lives under <code>{{ github.repo_path if github else 'tools/mobsf/...' }}</code>.
+      </p>
+
+      <div class="mobsf-pill-row" id="mobsf-github-pills">
+        {% if github %}
+          <span class="mobsf-pill {{ 'ok' if github.git_available else 'bad' }}">
+            <span class="mobsf-pill-dot"></span>
+            <span>git</span>
+            <strong>{{ github.git_version.split(' ')[-1] if github.git_available else 'missing' }}</strong>
+          </span>
+          <span class="mobsf-pill {{ 'ok' if github.python_available else 'bad' }}">
+            <span class="mobsf-pill-dot"></span>
+            <span>python</span>
+            <strong>{{ github.python_version.split(' ')[-1] if github.python_available else 'missing' }}</strong>
+          </span>
+          <span class="mobsf-pill {{ 'ok' if github.repo_cloned else 'bad' }}">
+            <span class="mobsf-pill-dot"></span>
+            <span>Repo</span>
+            <strong>{{ 'cloned' if github.repo_cloned else 'not cloned' }}</strong>
+          </span>
+          <span class="mobsf-pill {{ 'ok' if github.setup_done else 'bad' }}">
+            <span class="mobsf-pill-dot"></span>
+            <span>Setup</span>
+            <strong>{{ 'done' if github.setup_done else 'pending' }}</strong>
+          </span>
+          <span class="mobsf-pill {{ 'ok' if github.running else 'bad' }}">
+            <span class="mobsf-pill-dot"></span>
+            <span>MobSF</span>
+            <strong>{{ ('running pid ' ~ github.pid) if github.running else 'stopped' }}</strong>
+          </span>
+        {% else %}
+          <span class="mobsf-pill"><span class="mobsf-pill-dot"></span><span>status</span><strong>?</strong></span>
+        {% endif %}
+      </div>
+
+      <div class="mobsf-actions">
+        <button type="button" class="primary" id="mobsf-github-clone" data-action="clone">1. Clone repo</button>
+        <button type="button" class="primary" id="mobsf-github-setup" data-action="setup">2. Run setup</button>
+        <button type="button" class="primary" id="mobsf-github-start" data-action="start">3. Start MobSF</button>
+        <label class="mobsf-port-label">
+          <span>Host port</span>
+          <input type="number" class="port-input" id="mobsf-github-port" value="8000" min="1" max="65535" />
+        </label>
+        <button type="button" class="ghost" id="mobsf-github-stop" data-action="stop">Stop</button>
+        <button type="button" class="ghost small" id="mobsf-github-tail" data-action="tail" title="Show the tail of run.log">Show run.log</button>
+      </div>
+
+      <p class="muted small" id="mobsf-github-help">
+        Repo: <code>{{ github.repo_url if github else 'https://github.com/MobSF/Mobile-Security-Framework-MobSF.git' }}</code><br>
+        Setup script: <code>{{ github.setup_command or 'setup.sh / setup.bat' }}</code>, run script: <code>{{ github.run_command or 'run.sh / run.bat' }}</code>.
+        First setup downloads Python deps and can take several minutes.
+      </p>
+
+      <pre class="mobsf-log hidden" id="mobsf-github-log"></pre>
+    </section>
+
+    <section class="plugin-section">
+      <h2>Manual install (copy/paste)</h2>
+      <p class="muted small">Equivalent commands if you'd rather drive it yourself:</p>
+<pre class="mobsf-snippet">git clone https://github.com/MobSF/Mobile-Security-Framework-MobSF.git
+cd Mobile-Security-Framework-MobSF
+{% if github and github.platform == 'windows' %}setup.bat
+run.bat 127.0.0.1:8000{% else %}./setup.sh
+./run.sh 127.0.0.1:8000{% endif %}</pre>
+      <p class="muted small">After MobSF is up, copy the API key from its <em>Settings &rarr; API Docs</em> page and save it below.</p>
+    </section>
+  {% endif %}
+
+  <section class="plugin-section">
+    <h2>Configuration</h2>
+    <p class="muted small">Stored in <code>instance/mobsf.json</code> on the server. Falls back to <code>MOBSF_URL</code> / <code>MOBSF_API_KEY</code> env vars.</p>
+    <form class="plugin-form" id="mobsf-config-form" autocomplete="off">
+      <label class="plugin-form-row-full">
+        <span>MobSF URL</span>
+        <input type="url" name="url" id="mobsf-url" placeholder="http://localhost:8000" value="{{ status.url }}" required />
+      </label>
+      <label class="plugin-form-row-full">
+        <span>API key</span>
+        <input type="password" name="api_key" id="mobsf-api-key" placeholder="paste API key (or leave blank)" value="" />
+        {% if status.api_key_set %}<small class="muted">An API key is currently saved; leave blank to keep it.</small>{% endif %}
+      </label>
+      <div class="plugin-form-row-full plugin-form-actions">
+        <button type="button" class="primary" id="mobsf-save">Save &amp; test</button>
+        <button type="button" class="ghost" id="mobsf-detect">Test only</button>
+      </div>
+    </form>
+    <pre class="plugin-output" id="mobsf-config-output" hidden></pre>
+  </section>
+</div>
+
+<script>
+(function () {
+  const urlInput = document.getElementById("mobsf-url");
+  const keyInput = document.getElementById("mobsf-api-key");
+  const saveBtn = document.getElementById("mobsf-save");
+  const detectBtn = document.getElementById("mobsf-detect");
+  const output = document.getElementById("mobsf-config-output");
+  const apiKeyAlreadySet = {{ status.api_key_set | tojson }};
+
+  function show(msg, kind) {
+    output.hidden = false;
+    output.textContent = msg;
+    output.style.borderColor = kind === "ok" ? "rgba(70,200,120,0.4)" : "rgba(244,71,71,0.4)";
+  }
+
+  async function post(url, payload) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    let body = null;
+    try { body = await res.json(); } catch (_) { /* ignore */ }
+    if (!res.ok) {
+      const err = (body && (body.error || body.message)) || ("HTTP " + res.status);
+      throw new Error(err);
+    }
+    return body || {};
+  }
+
+  saveBtn && saveBtn.addEventListener("click", async () => {
+    const url = (urlInput.value || "").trim();
+    const apiKey = (keyInput.value || "").trim();
+    if (!url) { show("URL is required.", "warn"); return; }
+    saveBtn.disabled = true;
+    try {
+      const detect = await post("/plugins/mobsf/detect", { url, api_key: apiKey });
+      if (!detect.ok) {
+        show("Probe failed: " + (detect.message || "unknown"), "warn");
+      }
+      const persistKey = apiKey || (apiKeyAlreadySet ? null : "");
+      const body = { url };
+      if (persistKey !== null) body.api_key = persistKey;
+      const saved = await post("/plugins/mobsf/config", body);
+      show("Saved. " + (detect.ok ? "MobSF is reachable." : ("Probe warning: " + (detect.message || ""))), detect.ok ? "ok" : "warn");
+      if (detect.ok) {
+        setTimeout(() => { window.location.reload(); }, 600);
+      }
+    } catch (e) {
+      show("Save failed: " + (e.message || e), "warn");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  detectBtn && detectBtn.addEventListener("click", async () => {
+    const url = (urlInput.value || "").trim();
+    const apiKey = (keyInput.value || "").trim();
+    if (!url) { show("URL is required.", "warn"); return; }
+    detectBtn.disabled = true;
+    try {
+      const detect = await post("/plugins/mobsf/detect", { url, api_key: apiKey });
+      show((detect.ok ? "OK: " : "Failed: ") + (detect.message || ""), detect.ok ? "ok" : "warn");
+    } catch (e) {
+      show("Probe failed: " + (e.message || e), "warn");
+    } finally {
+      detectBtn.disabled = false;
+    }
+  });
+
+  // ---------- GitHub clone / setup / start / stop ----------
+  const githubSection = document.getElementById("mobsf-github-section");
+  if (githubSection) {
+    const pillRow = document.getElementById("mobsf-github-pills");
+    const portInput = document.getElementById("mobsf-github-port");
+    const cloneBtn = document.getElementById("mobsf-github-clone");
+    const setupBtn = document.getElementById("mobsf-github-setup");
+    const startBtn = document.getElementById("mobsf-github-start");
+    const stopBtn = document.getElementById("mobsf-github-stop");
+    const tailBtn = document.getElementById("mobsf-github-tail");
+    const refreshBtn = document.getElementById("mobsf-github-refresh");
+    const logEl = document.getElementById("mobsf-github-log");
+    let busy = false;
+
+    function setBusy(state) {
+      busy = !!state;
+      [cloneBtn, setupBtn, startBtn, stopBtn, tailBtn, refreshBtn].forEach((b) => {
+        if (b) b.disabled = busy;
+      });
+    }
+
+    function pill(cls, label, value) {
+      return `<span class="mobsf-pill ${cls}"><span class="mobsf-pill-dot"></span><span>${label}</span><strong>${value}</strong></span>`;
+    }
+
+    function lastWord(s) {
+      if (!s) return "";
+      const parts = (s || "").trim().split(/\s+/);
+      return parts[parts.length - 1] || "";
+    }
+
+    function paintStatus(g) {
+      if (!pillRow) return;
+      if (!g) {
+        pillRow.innerHTML = pill("bad", "status", "unknown");
+        return;
+      }
+      pillRow.innerHTML =
+        pill(g.git_available ? "ok" : "bad", "git", g.git_available ? (lastWord(g.git_version) || "yes") : "missing") +
+        pill(g.python_available ? "ok" : "bad", "python", g.python_available ? (lastWord(g.python_version) || "yes") : "missing") +
+        pill(g.repo_cloned ? "ok" : "bad", "Repo", g.repo_cloned ? "cloned" : "not cloned") +
+        pill(g.setup_done ? "ok" : "bad", "Setup", g.setup_done ? "done" : "pending") +
+        pill(g.running ? "ok" : "bad", "MobSF", g.running ? ("running pid " + g.pid) : "stopped");
+
+      const ready = g.git_available && g.python_available;
+      if (cloneBtn) {
+        cloneBtn.disabled = !ready || busy;
+        cloneBtn.textContent = g.repo_cloned ? "1. Re-fetch (git pull)" : "1. Clone repo";
+      }
+      if (setupBtn) {
+        setupBtn.disabled = !ready || !g.repo_cloned || busy;
+        setupBtn.textContent = g.setup_done ? "2. Re-run setup" : "2. Run setup";
+      }
+      if (startBtn) {
+        startBtn.disabled = !ready || !g.repo_cloned || busy;
+        startBtn.textContent = g.running ? "Restart MobSF" : "3. Start MobSF";
+      }
+      if (stopBtn) stopBtn.disabled = !g.running || busy;
+      if (tailBtn) tailBtn.disabled = !g.running && !g.pid;
+      if (portInput && g.host_port) portInput.value = String(g.host_port);
+    }
+
+    function appendLog(text) {
+      if (!logEl) return;
+      logEl.classList.remove("hidden");
+      logEl.textContent += text;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function clearLog() {
+      if (logEl) { logEl.textContent = ""; logEl.classList.remove("hidden"); }
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch("/plugins/mobsf/github/status");
+        const body = await res.json();
+        paintStatus(body && body.github);
+      } catch (e) {
+        paintStatus(null);
+      }
+    }
+
+    async function streamPost(url, beforeLog) {
+      clearLog();
+      if (beforeLog) appendLog(beforeLog + "\n");
+      const res = await fetch(url, { method: "POST" });
+      if (!res.ok || !res.body) {
+        appendLog(`[client] HTTP ${res.status} from ${url}\n`);
+        return false;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let lastLine = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value, { stream: true });
+        appendLog(chunk);
+        lastLine = (chunk || "").split("\n").filter(Boolean).pop() || lastLine;
+      }
+      const okRe = /\[exit 0\]/;
+      return okRe.test(lastLine) || okRe.test(logEl.textContent || "");
+    }
+
+    async function postJson(url, payload) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+      });
+      let body = null;
+      try { body = await res.json(); } catch (_) { /* ignore */ }
+      return { ok: res.ok, status: res.status, body: body || {} };
+    }
+
+    cloneBtn && cloneBtn.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await streamPost("/plugins/mobsf/github/clone", "[client] running git clone...");
+      } finally {
+        await refreshStatus();
+        setBusy(false);
+      }
+    });
+
+    setupBtn && setupBtn.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await streamPost("/plugins/mobsf/github/setup", "[client] running MobSF setup script (this can take several minutes)...");
+      } finally {
+        await refreshStatus();
+        setBusy(false);
+      }
+    });
+
+    startBtn && startBtn.addEventListener("click", async () => {
+      setBusy(true);
+      clearLog();
+      const port = parseInt(portInput.value || "8000", 10) || 8000;
+      appendLog(`[client] launching MobSF on host port ${port}...\n`);
+      const r = await postJson("/plugins/mobsf/github/start", { host_port: port });
+      appendLog(`[server] ${r.body.message || (r.ok ? "ok" : "failed")}\n`);
+      if (r.body.url_updated) appendLog(`[server] saved MobSF URL -> ${r.body.url_updated}\n`);
+      await refreshStatus();
+      if (r.ok) {
+        appendLog("[client] giving MobSF ~10s to bind, then reloading...\n");
+        setTimeout(() => { window.location.reload(); }, 10000);
+      }
+      setBusy(false);
+    });
+
+    stopBtn && stopBtn.addEventListener("click", async () => {
+      setBusy(true);
+      const r = await postJson("/plugins/mobsf/github/stop", {});
+      appendLog(`[server] ${r.body.message || (r.ok ? "stopped" : "failed")}\n`);
+      await refreshStatus();
+      setBusy(false);
+    });
+
+    tailBtn && tailBtn.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        const res = await fetch("/plugins/mobsf/github/log");
+        const text = await res.text();
+        clearLog();
+        appendLog(text || "[client] (run log is empty)\n");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    refreshBtn && refreshBtn.addEventListener("click", () => { void refreshStatus(); });
+
+    void refreshStatus();
+  }
+})();
+</script>
+{% endblock %}

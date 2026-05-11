@@ -59,12 +59,18 @@ def create_app() -> Flask:
         "ENABLE_GITLEAKS",
         "ENABLE_TRUFFLEHOG",
         "ENABLE_RADARE2",
+        "ENABLE_APKID",
         "ENABLE_PLUGINS",
+        "ENABLE_MOBSF",
     ):
         _refresh_bool(_bool_key)
 
     if os.environ.get("PLUGINS_CONFIG"):
         app.config["PLUGINS_CONFIG_PATH"] = os.environ["PLUGINS_CONFIG"]
+
+    for _str_key in ("MOBSF_URL", "MOBSF_API_KEY"):
+        if os.environ.get(_str_key) is not None:
+            app.config[_str_key] = os.environ[_str_key]
 
     workspaces = Path(app.config["WORKSPACES_ROOT"])
     workspaces.mkdir(parents=True, exist_ok=True)

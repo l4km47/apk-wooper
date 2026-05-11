@@ -54,6 +54,13 @@ class Plugin:
     blueprint: Optional[Blueprint] = None
     wsgi_app: Optional[Any] = None
     health: Optional[Callable[[], Dict[str, Any]]] = None
+    pip_requires: List[str] = field(default_factory=list)
+    """Optional pip-installable dependencies the plugin can use.
+
+    Each entry is either ``"pkg"`` or ``"pkg:import_name"`` when the
+    distribution name differs from the import name (e.g. ``"pyyaml:yaml"``).
+    The dashboard surfaces missing entries with an inline install button.
+    """
 
     def to_public_dict(self, *, healthy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return {

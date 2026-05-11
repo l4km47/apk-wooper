@@ -29,6 +29,7 @@ class Category(str, Enum):
     AUTH = "auth"
     SDK = "sdk"
     NATIVE = "native"
+    PROTECTION = "protection"
     OTHER = "other"
 
 

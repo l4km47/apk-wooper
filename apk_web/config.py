@@ -60,11 +60,17 @@ class Config:
     ENABLE_GITLEAKS = _env_bool("ENABLE_GITLEAKS", False)
     ENABLE_TRUFFLEHOG = _env_bool("ENABLE_TRUFFLEHOG", False)
     ENABLE_RADARE2 = _env_bool("ENABLE_RADARE2", False)
+    ENABLE_APKID = _env_bool("ENABLE_APKID", False)
 
     # Plugin system
     ENABLE_PLUGINS = _env_bool("ENABLE_PLUGINS", True)
     _plugins_config = os.environ.get("PLUGINS_CONFIG", "").strip()
     PLUGINS_CONFIG_PATH = _plugins_config or str(_repo_root() / "plugins.json")
+
+    # MobSF plugin
+    ENABLE_MOBSF = _env_bool("ENABLE_MOBSF", True)
+    MOBSF_URL = os.environ.get("MOBSF_URL", "http://localhost:8000").strip()
+    MOBSF_API_KEY = os.environ.get("MOBSF_API_KEY", "").strip()
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

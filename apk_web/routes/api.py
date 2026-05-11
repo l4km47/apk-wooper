@@ -8,7 +8,15 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
-from flask import Blueprint, Response, current_app, jsonify, request, send_file
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    jsonify,
+    request,
+    send_file,
+    stream_with_context,
+)
 from werkzeug.utils import secure_filename
 
 from apk_web.analysis.runner import is_running as analysis_is_running
@@ -493,6 +501,8 @@ def analysis_log(job_id: str):
 @login_required
 def analysis_tools_status():
     """Report optional-scanner toggles and whether each binary is installed."""
+    import importlib.util
+
     from apk_web.tools_bootstrap import find_optional_tool
 
     cfg = current_app.config
@@ -514,7 +524,20 @@ def analysis_tools_status():
             "installed": binary is not None,
             "binary_path": str(binary) if binary else None,
             "auto_install": key in ("gitleaks", "trufflehog", "radare2"),
+            "kind": "binary",
         }
+
+    # APKiD is a pure-Python package; surface it the same way but with a
+    # pip-style install hint.
+    apkid_spec = importlib.util.find_spec("apkid")
+    snapshot["apkid"] = {
+        "enabled": bool(cfg.get("ENABLE_APKID", False)),
+        "installed": apkid_spec is not None,
+        "binary_path": getattr(apkid_spec, "origin", None) if apkid_spec else None,
+        "auto_install": False,
+        "kind": "python_package",
+        "install_command": "pip install apkid",
+    }
     return jsonify({"tools": snapshot})
 
 
@@ -530,7 +553,7 @@ def analysis_tools_action(tool: str):
     action = (payload.get("action") or "").lower()
     cfg = current_app.config
 
-    if tool not in ("gitleaks", "trufflehog", "radare2"):
+    if tool not in ("gitleaks", "trufflehog", "radare2", "apkid"):
         return jsonify({"error": "unknown tool"}), 400
 
     flag = "ENABLE_" + tool.upper()
@@ -540,6 +563,19 @@ def analysis_tools_action(tool: str):
         return jsonify({"ok": True, "enabled": cfg[flag]})
 
     if action == "install":
+        if tool == "apkid":
+            from apk_web.analysis.apkid_installer import install_blocking
+
+            force_source = bool(payload.get("force_source"))
+            strategy = str(payload.get("strategy") or "auto").lower()
+            if strategy not in ("auto", "wheel", "source", "git_source"):
+                return jsonify({"error": f"unknown strategy: {strategy}"}), 400
+            result = install_blocking(
+                force_source=force_source, strategy=strategy
+            )
+            status_code = 200 if result.ok else 500
+            return jsonify(result.to_dict()), status_code
+
         tools_root = Path(cfg.get("TOOLS_ROOT") or "tools")
         try:
             from apk_web.tools_bootstrap import ensure_gitleaks, ensure_radare2, ensure_trufflehog
@@ -555,6 +591,35 @@ def analysis_tools_action(tool: str):
         return jsonify({"ok": True, "binary_path": str(path)})
 
     return jsonify({"error": "missing action"}), 400
+
+
+@api_bp.route("/analysis/tools/apkid/install/stream", methods=["POST"])
+@login_required
+def apkid_install_stream():
+    """Stream APKiD pip install output line-by-line as ``text/plain``.
+
+    Final line is ``[result ok]`` or ``[result error <kind>]`` so the UI
+    can react without re-parsing pip's noise.
+    """
+    from apk_web.analysis.apkid_installer import install_streaming
+
+    body = request.get_json(silent=True) or {}
+    force_source = bool(body.get("force_source"))
+    strategy = str(body.get("strategy") or "auto").lower()
+    if strategy not in ("auto", "wheel", "source", "git_source"):
+        strategy = "auto"
+
+    def _gen():
+        for line in install_streaming(
+            force_source=force_source, strategy=strategy
+        ):
+            yield (line + "\n")
+
+    return Response(
+        stream_with_context(_gen()),
+        mimetype="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @api_bp.route("/jobs/<job_id>/analysis", methods=["POST"])
@@ -813,3 +878,108 @@ def plugins_set_enabled(plugin_id: str):
     cfg = plugin_config.set_enabled(cfg, plugin_id, enabled)
     plugin_config.save(path, cfg)
     return jsonify({"ok": True, "restart_required": True, "config": cfg})
+
+
+# ---------------------------------------------------------------------------
+# Plugin pip dependencies (per-plugin `pip_requires` manifest entries)
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/plugins/dependencies", methods=["GET"])
+@login_required
+def plugins_dependencies_list():
+    """Return per-plugin pip-installable dependencies and install state."""
+    from apk_web.plugins import dependencies as plugin_deps
+
+    registry = _plugin_registry_or_none()
+    plugins = list(registry.all()) if registry else []
+    deps = [d.to_dict() for d in plugin_deps.collect(plugins)]
+    return jsonify(
+        {
+            "ok": True,
+            "enabled": bool(current_app.config.get("ENABLE_PLUGINS", True)),
+            "dependencies": deps,
+            "missing_count": sum(1 for d in deps if not d["installed"]),
+        }
+    )
+
+
+@api_bp.route("/plugins/dependencies/install", methods=["POST"])
+@login_required
+def plugins_dependencies_install():
+    """Stream ``pip install <allowed-packages>`` line-by-line.
+
+    Only packages declared in a registered plugin's ``pip_requires`` may
+    be installed; everything else is rejected to keep this endpoint from
+    becoming a generic ``pip install`` proxy.
+    """
+    from apk_web.plugins import dependencies as plugin_deps
+
+    body = request.get_json(silent=True) or {}
+    requested = body.get("packages")
+    if not isinstance(requested, list) or not requested:
+        return jsonify({"ok": False, "error": "packages: non-empty list required"}), 400
+    requested_specs = [str(p).strip() for p in requested if str(p).strip()]
+    if not requested_specs:
+        return jsonify({"ok": False, "error": "packages: at least one non-empty entry required"}), 400
+
+    registry = _plugin_registry_or_none()
+    plugins = list(registry.all()) if registry else []
+    allowed = plugin_deps.allowed_pip_specs(plugins)
+    disallowed = [p for p in requested_specs if p not in allowed]
+    if disallowed:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "package not declared by any registered plugin",
+                    "disallowed": disallowed,
+                }
+            ),
+            400,
+        )
+
+    def _gen():
+        for line in plugin_deps.install_streaming(requested_specs):
+            yield (line + "\n")
+
+    return Response(
+        stream_with_context(_gen()),
+        mimetype="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# MobSF status (used by the dashboard toolbar to show/hide its button)
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/mobsf/status", methods=["GET"])
+@login_required
+def mobsf_status():
+    cfg = current_app.config
+    if not cfg.get("ENABLE_MOBSF", True):
+        return jsonify(
+            {"ok": False, "enabled": False, "url": "", "message": "MobSF plugin disabled"}
+        )
+    try:
+        from apk_web.plugins.mobsf.client import MobsfClient, load_config
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "enabled": True, "url": "", "message": str(exc)})
+    mobsf_cfg = load_config(
+        current_app.instance_path,
+        env_url=str(cfg.get("MOBSF_URL") or ""),
+        env_api_key=str(cfg.get("MOBSF_API_KEY") or ""),
+    )
+    client = MobsfClient(mobsf_cfg.get("url", ""), mobsf_cfg.get("api_key", ""), timeout=4.0)
+    ok, message = client.ping()
+    return jsonify(
+        {
+            "ok": bool(ok),
+            "enabled": True,
+            "url": mobsf_cfg.get("url", ""),
+            "message": message,
+            "api_key_set": bool(mobsf_cfg.get("api_key")),
+        }
+    )

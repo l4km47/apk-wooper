@@ -1,5 +1,31 @@
+# Core dependencies for the APK Wooper dashboard.
+# These are required to boot the Flask app and run the analysis engine.
+
+# Web framework + HTTP utilities
 flask>=3.0,<4
 werkzeug>=3.0,<4
 python-dotenv>=1.0,<2
+
+# Used by the dashboard for outbound HTTP (job downloads, plugin probes).
+requests>=2.31,<3
+
+# Analysis engine: ELF / .so parsing for the native scanner.
 pyelftools>=0.30,<1
+
+# Test runner (kept here so `pip install -r requirements.txt` works for CI).
 pytest>=8,<9
+
+# -----------------------------------------------------------------------------
+# Optional / opt-in extras (uncomment or install via the dashboard UI):
+#
+#   pip install -r requirements-optional.txt
+#
+# - apkid       Fingerprints packers / obfuscators / compilers on APKs.
+#               On Python 3.13+ you may need the "Install via GitHub source"
+#               button in Settings -> Analysis engine (builds yara-python-dex
+#               from its GitHub repo).
+#
+# The plugin system also supports per-plugin `pip_requires` manifests; any
+# missing entries are surfaced in Settings -> Plugins with one-click install
+# buttons so external plugins can declare their own optional deps.
+# -----------------------------------------------------------------------------

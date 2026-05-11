@@ -42,8 +42,12 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch):
         "ENABLE_GITLEAKS",
         "ENABLE_TRUFFLEHOG",
         "ENABLE_RADARE2",
+        "ENABLE_APKID",
         "ENABLE_PLUGINS",
         "PLUGINS_CONFIG",
+        "ENABLE_MOBSF",
+        "MOBSF_URL",
+        "MOBSF_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
 
