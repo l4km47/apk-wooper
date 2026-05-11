@@ -550,6 +550,178 @@ if (refreshToolsBtn) {
   refreshToolsBtn.addEventListener("click", () => void loadAnalysisTools());
 }
 
+// ---------------------------------------------------------------------------
+// Plugin system
+// ---------------------------------------------------------------------------
+
+const pluginListEl = document.getElementById("plugin-list");
+const pluginsSettingsListEl = document.getElementById("plugins-settings-list");
+const refreshPluginsBtn = document.getElementById("refresh-plugins-settings");
+const pluginsAddForm = document.getElementById("plugins-add-form");
+const pluginsAddStatus = document.getElementById("plg-add-status");
+
+let _pluginsCache = [];
+let _pluginsLoadErrors = [];
+
+function pluginAcceptsRule(ruleId) {
+  if (!ruleId) return [];
+  return _pluginsCache.filter((p) => (p.accepts || []).includes(ruleId));
+}
+
+async function loadPlugins() {
+  let data;
+  try {
+    data = await fetchJSON("/api/plugins");
+  } catch {
+    if (pluginListEl) pluginListEl.textContent = "Failed to load plugins.";
+    return;
+  }
+  _pluginsCache = Array.isArray(data?.plugins) ? data.plugins : [];
+  _pluginsLoadErrors = Array.isArray(data?.errors) ? data.errors : [];
+  renderPluginSidebar();
+  renderPluginsSettings();
+  if (typeof refreshAnalysisListInPlace === "function") {
+    refreshAnalysisListInPlace();
+  }
+}
+
+function renderPluginSidebar() {
+  if (!pluginListEl) return;
+  pluginListEl.innerHTML = "";
+  if (!_pluginsCache.length) {
+    pluginListEl.classList.add("muted", "small");
+    pluginListEl.textContent = "No plugins installed.";
+    return;
+  }
+  pluginListEl.classList.remove("muted", "small");
+  for (const plg of _pluginsCache) {
+    const row = document.createElement("a");
+    row.className = "plugin-sidebar-row";
+    row.href = plg.url || `/plugins/${plg.id}`;
+    row.title = plg.description || plg.name;
+    const name = document.createElement("span");
+    name.className = "plugin-sidebar-name";
+    name.textContent = plg.name;
+    const src = document.createElement("span");
+    src.className = `plugin-sidebar-source ${plg.source || "builtin"}`;
+    src.textContent = plg.source || "builtin";
+    row.appendChild(name);
+    row.appendChild(src);
+    pluginListEl.appendChild(row);
+  }
+}
+
+function renderPluginsSettings() {
+  if (!pluginsSettingsListEl) return;
+  pluginsSettingsListEl.innerHTML = "";
+  if (!_pluginsCache.length && !_pluginsLoadErrors.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted small";
+    empty.textContent = "No plugins installed yet.";
+    pluginsSettingsListEl.appendChild(empty);
+    return;
+  }
+  for (const plg of _pluginsCache) {
+    const row = document.createElement("div");
+    row.className = "plugin-settings-row";
+    row.innerHTML = `
+      <div class="plugin-settings-head">
+        <span class="plugin-settings-name">${escapeHtml(plg.name)}</span>
+        <span class="plugin-settings-source ${plg.source}">${plg.source}</span>
+        <span class="muted small">v${escapeHtml(plg.version || "0.0.0")}</span>
+      </div>
+      <div class="muted small">${escapeHtml(plg.description || "")}</div>
+      <div class="muted small">URL: <code>${escapeHtml(plg.url)}</code> &middot; mode: ${escapeHtml(plg.mode)}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "plugin-settings-actions";
+    const open = document.createElement("a");
+    open.className = "ghost small";
+    open.href = plg.url;
+    open.textContent = "Open";
+    actions.appendChild(open);
+    if (plg.source === "external") {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "danger small";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", async () => {
+        if (!confirm(`Remove external plugin "${plg.id}"? Server restart required.`)) return;
+        try {
+          await fetchJSON(`/api/plugins/external/${encodeURIComponent(plg.id)}`, { method: "DELETE" });
+          await loadPlugins();
+        } catch (e) {
+          alert("Remove failed: " + (e?.message || e));
+        }
+      });
+      actions.appendChild(remove);
+    }
+    row.appendChild(actions);
+    pluginsSettingsListEl.appendChild(row);
+  }
+  if (_pluginsLoadErrors.length) {
+    const errBox = document.createElement("div");
+    errBox.className = "plugin-settings-errors";
+    errBox.innerHTML = "<strong>Load errors:</strong>";
+    const ul = document.createElement("ul");
+    for (const err of _pluginsLoadErrors) {
+      const li = document.createElement("li");
+      li.textContent = `${err.source}: ${err.error}`;
+      ul.appendChild(li);
+    }
+    errBox.appendChild(ul);
+    pluginsSettingsListEl.appendChild(errBox);
+  }
+}
+
+if (refreshPluginsBtn) {
+  refreshPluginsBtn.addEventListener("click", () => loadPlugins().catch(() => {}));
+}
+
+if (pluginsAddForm) {
+  pluginsAddForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const body = {
+      id: document.getElementById("plg-id").value.trim(),
+      name: document.getElementById("plg-name").value.trim(),
+      external_path: document.getElementById("plg-path").value.trim() || null,
+      module: document.getElementById("plg-module").value.trim() || null,
+      blueprint_attr: document.getElementById("plg-bp").value.trim() || "bp",
+      mode: document.getElementById("plg-mode").value || "iframe",
+      accepts: document.getElementById("plg-accepts").value
+        .split(",").map(s => s.trim()).filter(Boolean),
+    };
+    if (!body.id) {
+      pluginsAddStatus.textContent = "ID is required.";
+      return;
+    }
+    if (!body.external_path && !body.module) {
+      pluginsAddStatus.textContent = "Provide external_path or module.";
+      return;
+    }
+    pluginsAddStatus.textContent = "Saving...";
+    try {
+      await fetchJSON("/api/plugins/external", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      pluginsAddStatus.textContent = "Saved. Restart the server to load the new plugin.";
+      pluginsAddForm.reset();
+      document.getElementById("plg-bp").value = "bp";
+      await loadPlugins();
+    } catch (e) {
+      pluginsAddStatus.textContent = "Failed: " + (e?.message || e);
+    }
+  });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
 function closeSettings() {
   if (settingsModal?.open) settingsModal.close();
 }
