@@ -650,14 +650,27 @@ body {
 
 .job-item-top {
   display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.job-item-top .job-item-body > .job-item-row:first-child {
   justify-content: space-between;
-  gap: 8px;
-  align-items: baseline;
 }
 
 .job-name {
   font-size: 13px;
-  word-break: break-all;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
 }
 
 .job-meta {
@@ -720,9 +733,13 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   align-items: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 70%),
+    var(--panel);
+  backdrop-filter: blur(2px);
 }
 
 .toolbar-left {
@@ -734,9 +751,17 @@ body {
 
 .toolbar-right {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-shrink: 0;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+  opacity: 0.7;
 }
 
 .job-title {
@@ -744,6 +769,148 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+/* -------------------------------------------------------------------------
+ * Toolbar action buttons (Log / Download / Scan in MobSF / Delete)
+ *
+ * Each button has an inline SVG icon + an `.action-label` span. Intent
+ * variants (`.intent-neutral|accent|success|danger`) give it a subtle
+ * tinted border and matching hover glow. Disabled state stays neutral
+ * so toggling availability never feels jarring.
+ * ----------------------------------------------------------------------- */
+
+.action-btn {
+  --btn-fg: var(--text);
+  --btn-tint: 255, 255, 255;
+  --btn-border: var(--border);
+  --btn-glow: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--btn-fg);
+  background:
+    linear-gradient(180deg,
+      rgba(var(--btn-tint), 0.06),
+      rgba(var(--btn-tint), 0.02));
+  border: 1px solid var(--btn-border);
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg,
+      rgba(var(--btn-tint), 0.18),
+      rgba(var(--btn-tint), 0.08));
+  border-color: rgba(var(--btn-tint), 0.55);
+  box-shadow:
+    0 0 0 1px rgba(var(--btn-tint), 0.08),
+    0 4px 14px -8px var(--btn-glow);
+}
+
+.action-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px rgba(var(--btn-tint), 0.55);
+}
+
+.action-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: saturate(0.5);
+}
+
+.action-btn.is-busy {
+  cursor: wait;
+}
+
+.action-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: rgb(var(--btn-tint));
+  transition: color 120ms ease;
+}
+
+.action-btn.intent-neutral .action-icon {
+  color: var(--muted);
+}
+
+.action-btn:hover:not(:disabled) .action-icon {
+  color: rgb(var(--btn-tint));
+}
+
+.action-btn.intent-neutral:hover:not(:disabled) .action-icon {
+  color: var(--text);
+}
+
+.action-label {
+  line-height: 1;
+}
+
+/* Intent palette */
+.action-btn.intent-neutral {
+  --btn-tint: 200, 200, 200;
+  --btn-border: var(--border);
+  --btn-glow: rgba(0, 0, 0, 0.45);
+}
+
+.action-btn.intent-accent {
+  --btn-tint: 55, 148, 255;
+  --btn-border: rgba(55, 148, 255, 0.32);
+  --btn-glow: rgba(55, 148, 255, 0.45);
+  color: #d6e8ff;
+}
+
+.action-btn.intent-success {
+  --btn-tint: 137, 209, 133;
+  --btn-border: rgba(137, 209, 133, 0.32);
+  --btn-glow: rgba(137, 209, 133, 0.40);
+  color: #d4ecd2;
+}
+
+.action-btn.intent-danger {
+  --btn-tint: 244, 71, 71;
+  --btn-border: rgba(244, 71, 71, 0.30);
+  --btn-glow: rgba(244, 71, 71, 0.40);
+  color: #f3c8c8;
+}
+
+.action-btn.intent-danger:hover:not(:disabled) {
+  color: #ffd9d9;
+}
+
+@media (max-width: 1100px) {
+  .action-btn .action-label {
+    display: none;
+  }
+  .action-btn {
+    padding: 6px 8px;
+  }
+  .action-icon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .workspace {
@@ -1020,6 +1187,9 @@ button.small {
 
 button.danger.ghost {
   border-color: rgba(244, 71, 71, 0.35);
+  border-radius: 6px;
+  padding: 6px 10px;
+  
 }
 
 button:disabled,
@@ -2056,4 +2226,386 @@ a.button[aria-disabled="true"] {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* -------------------------------------------------------------------------
+ * Overview pane (APK info + APKiD detections)
+ * ----------------------------------------------------------------------- */
+
+.overview-empty {
+  padding: 22px 18px;
+  font-size: 13px;
+}
+
+.overview-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.overview-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.005));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.overview-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.overview-app {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.overview-icon-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.overview-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.overview-icon-placeholder {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.overview-app-text {
+  min-width: 0;
+}
+
+.overview-app-name {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-app-pkg {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-app-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ov-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.ov-chip.muted {
+  color: var(--muted);
+  background: transparent;
+}
+
+.ov-chip.ov-chip-warn {
+  border-color: rgba(204, 167, 0, 0.55);
+  color: var(--warn);
+  background: rgba(204, 167, 0, 0.08);
+}
+
+.overview-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: start;
+}
+
+/* Fingerprints */
+
+.overview-fp-row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.overview-fp-row:last-child {
+  border-bottom: none;
+}
+
+.overview-fp-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.overview-fp-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+}
+
+/* Manifest key/value */
+
+.overview-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overview-kv > div {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.overview-kv-k {
+  color: var(--muted);
+  min-width: 130px;
+}
+
+.overview-kv-v {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.overview-perm-details {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.overview-perm-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.overview-perm-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 4px 14px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.overview-perm-list li {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+
+/* APKiD detections */
+
+.apkid-group {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.apkid-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.apkid-group:first-child {
+  padding-top: 0;
+}
+
+.apkid-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.apkid-cat {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.apkid-cat-info {
+  border-color: rgba(55, 148, 255, 0.40);
+  color: #d6e8ff;
+  background: rgba(55, 148, 255, 0.10);
+}
+
+.apkid-cat-warn {
+  border-color: rgba(204, 167, 0, 0.55);
+  color: var(--warn);
+  background: rgba(204, 167, 0, 0.10);
+}
+
+.apkid-cat-danger {
+  border-color: rgba(244, 71, 71, 0.45);
+  color: #ff8585;
+  background: rgba(244, 71, 71, 0.10);
+}
+
+.apkid-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.apkid-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.apkid-tag-info {
+  border-color: rgba(55, 148, 255, 0.32);
+  color: #d6e8ff;
+}
+
+.apkid-tag-warn {
+  border-color: rgba(204, 167, 0, 0.40);
+  color: #ead079;
+}
+
+.apkid-tag-danger {
+  border-color: rgba(244, 71, 71, 0.40);
+  color: #ffbcbc;
+}
+
+@media (max-width: 720px) {
+  .overview-app {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  .overview-app-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+  .overview-icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+  }
+  .overview-fp-row {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+  .overview-fp-row > button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Jobs sidebar list — APK metadata rows
+ * ----------------------------------------------------------------------- */
+
+.job-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.job-item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.job-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.job-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.job-item-pkg {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-item-version {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }

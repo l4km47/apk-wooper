@@ -167,9 +167,14 @@ def run_decompile_job(app: Flask, job_id: str) -> None:
         else:
             store.update_meta(job_id, status="done", error_message=None)
 
-        # Phase 3: post-decompile static analysis (runs only when at least
-        # some decompile output exists). Failures here must never flip the
-        # job back to "failed" — the JADX/Apktool work is already valid.
+        try:
+            from apk_web.apk_meta import extract as extract_apk_meta
+
+            apk_meta = extract_apk_meta(job_dir)
+            store.update_meta(job_id, apk_meta=apk_meta.to_dict())
+        except Exception as meta_exc:  # pragma: no cover - defensive
+            store.append_log(job_id, f"[apk_meta][warn] failed: {meta_exc}\n")
+
         if cfg.get("ENABLE_ANALYSIS", True) and cfg.get("ANALYSIS_AUTO_RUN", True):
             if _has_any_files(out_root):
                 store.update_meta(job_id, analysis_status="pending")

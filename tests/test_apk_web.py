@@ -72,6 +72,86 @@ def test_jobs_api_empty_when_authed(client):
     assert rv.get_json()["jobs"] == []
 
 
+def test_apk_meta_endpoints(app, client, tmp_path: Path):
+    """Confirm /apk-meta GET (with lazy backfill) and POST (force) work."""
+    from apk_web import apk_meta as _apk_meta
+
+    store = app.extensions["job_store"]
+    job_id = store.create_job(original_filename="sample.apk")
+    job_dir = store.job_dir(job_id)
+    # Build a minimal apktool tree the extractor can read.
+    apktool = job_dir / "out" / "apktool"
+    apktool.mkdir(parents=True)
+    (apktool / "AndroidManifest.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<manifest xmlns:android="http://schemas.android.com/apk/res/android" '
+        'package="com.example.test" '
+        'android:versionName="2.0" android:versionCode="3" '
+        'android:compileSdkVersion="34">'
+        '<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="33"/>'
+        '<application android:label="Tester"></application>'
+        '</manifest>',
+        encoding="utf-8",
+    )
+    (job_dir / "input.apk").write_bytes(b"PK\x05\x06" + b"\x00" * 18)  # mini-zip
+
+    _login(client)
+    rv = client.get(f"/api/jobs/{job_id}/apk-meta")
+    assert rv.status_code == 200
+    payload = rv.get_json()["apk_meta"]
+    assert payload["package"] == "com.example.test"
+    assert payload["label"] == "Tester"
+    assert payload["version_name"] == "2.0"
+    assert payload["min_sdk"] == 24
+    assert payload["target_sdk"] == 33
+
+    # The lazy backfill must have persisted into meta.json.
+    meta_now = store.get_meta(job_id)
+    assert meta_now["apk_meta"]["package"] == "com.example.test"
+
+    rv2 = client.post(f"/api/jobs/{job_id}/apk-meta")
+    assert rv2.status_code == 200
+    assert rv2.get_json()["apk_meta"]["package"] == "com.example.test"
+
+
+def test_icon_endpoint_serves_inline_and_404s_when_missing(app, client, tmp_path: Path):
+    store = app.extensions["job_store"]
+    job_id = store.create_job(original_filename="sample.apk")
+    job_dir = store.job_dir(job_id)
+    # No metadata yet -> 404.
+    _login(client)
+    rv = client.get(f"/api/jobs/{job_id}/icon")
+    assert rv.status_code == 404
+
+    # Now seed an icon + meta and confirm we serve it inline.
+    (job_dir / "meta").mkdir(parents=True)
+    icon_bytes = bytes.fromhex(
+        "89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4"
+        "890000000A49444154789C6300010000000500010D0A2DB40000000049454E44"
+        "AE426082"
+    )
+    (job_dir / "meta" / "icon.png").write_bytes(icon_bytes)
+    store.update_meta(job_id, apk_meta={"icon_rel": "meta/icon.png"})
+
+    rv2 = client.get(f"/api/jobs/{job_id}/icon")
+    assert rv2.status_code == 200
+    assert rv2.headers["Content-Type"].startswith("image/png")
+    # Inline, not attachment.
+    cd = rv2.headers.get("Content-Disposition", "")
+    assert "attachment" not in cd
+    assert rv2.data == icon_bytes
+
+
+def test_icon_endpoint_rejects_traversal(app, client):
+    store = app.extensions["job_store"]
+    job_id = store.create_job(original_filename="sample.apk")
+    store.update_meta(job_id, apk_meta={"icon_rel": "../../../etc/passwd"})
+
+    _login(client)
+    rv = client.get(f"/api/jobs/{job_id}/icon")
+    assert rv.status_code == 400
+
+
 def test_safe_relative_path_blocks_traversal(tmp_path: Path):
     from apk_web.path_safety import safe_relative_path
 

@@ -8,3 +8,5 @@ __pycache__/
 .admin_password.txt
 tools/
 .apkwooper/
+run.bat
+run.sh

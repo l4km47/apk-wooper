@@ -280,6 +280,100 @@ def job_file_raw(job_id: str):
     )
 
 
+@api_bp.route("/jobs/<job_id>/icon", methods=["GET"])
+@login_required
+def job_icon(job_id: str):
+    """Serve the cached app icon inline (or 404 if extraction never produced one)."""
+    if not is_valid_job_id(job_id):
+        return jsonify({"error": "invalid job id"}), 400
+    store = _store()
+    if not store.job_dir(job_id).is_dir():
+        return jsonify({"error": "not found"}), 404
+    try:
+        meta = store.get_meta(job_id)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    apk_meta = meta.get("apk_meta") or {}
+    rel = str(apk_meta.get("icon_rel") or "").strip()
+    if not rel:
+        return jsonify({"error": "no icon"}), 404
+    try:
+        target = safe_relative_path(store.job_dir(job_id), rel)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not target.is_file():
+        return jsonify({"error": "no icon"}), 404
+    resp = send_file(target, mimetype=_icon_mimetype(target.suffix.lower()))
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
+
+
+@api_bp.route("/jobs/<job_id>/apk-meta", methods=["GET"])
+@login_required
+def job_apk_meta(job_id: str):
+    """Return only the APK metadata block; lazily backfills for legacy jobs."""
+    if not is_valid_job_id(job_id):
+        return jsonify({"error": "invalid job id"}), 400
+    store = _store()
+    if not store.job_dir(job_id).is_dir():
+        return jsonify({"error": "not found"}), 404
+    try:
+        meta = store.get_meta(job_id)
+    except FileNotFoundError:
+        return jsonify({"error": "not found"}), 404
+    apk_meta = meta.get("apk_meta")
+    if not apk_meta:
+        apk_meta = _backfill_apk_meta(job_id)
+    return jsonify({"apk_meta": apk_meta or {}})
+
+
+@api_bp.route("/jobs/<job_id>/apk-meta", methods=["POST"])
+@login_required
+def job_apk_meta_refresh(job_id: str):
+    """Force re-extraction of APK metadata (e.g. after copying a new icon)."""
+    if not is_valid_job_id(job_id):
+        return jsonify({"error": "invalid job id"}), 400
+    store = _store()
+    if not store.job_dir(job_id).is_dir():
+        return jsonify({"error": "not found"}), 404
+    apk_meta = _backfill_apk_meta(job_id, force=True)
+    return jsonify({"apk_meta": apk_meta or {}})
+
+
+def _icon_mimetype(suffix: str) -> str:
+    return {
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+    }.get(suffix, "application/octet-stream")
+
+
+def _backfill_apk_meta(job_id: str, *, force: bool = False) -> Dict[str, Any]:
+    """Extract & persist APK metadata for an existing job.
+
+    Used both for legacy jobs created before this feature shipped and for
+    explicit refresh requests. Returns the freshly stored dict (or the
+    existing one if extraction is impossible).
+    """
+    from apk_web.apk_meta import extract as extract_apk_meta
+
+    store = _store()
+    try:
+        meta = store.get_meta(job_id)
+    except FileNotFoundError:
+        return {}
+    if not force and meta.get("apk_meta"):
+        return meta["apk_meta"]
+    try:
+        apk_meta = extract_apk_meta(store.job_dir(job_id)).to_dict()
+    except Exception:  # noqa: BLE001 - never fail a request over metadata
+        return meta.get("apk_meta") or {}
+    store.update_meta(job_id, apk_meta=apk_meta)
+    return apk_meta
+
+
 class _ChunkSink:
     """
     Non-seekable file-like sink for :mod:`zipfile`. zipfile detects the

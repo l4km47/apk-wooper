@@ -58,10 +58,32 @@
             <span id="job-badge" class="badge muted"></span>
           </div>
           <div class="toolbar-right">
-            <button id="btn-log" type="button" class="ghost" disabled>Log</button>
-            <button id="btn-download" type="button" class="ghost" disabled>Download ZIP</button>
-            <button id="btn-mobsf-scan" type="button" class="ghost hidden" disabled title="Send this APK to MobSF and open the report">Scan in MobSF</button>
-            <button id="btn-delete" type="button" class="danger ghost" disabled>Delete job</button>
+            <button id="btn-log" type="button" class="action-btn intent-neutral" disabled title="Show decompile log for this job">
+              <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h12M4 9h16M4 13h11M4 17h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+              </svg>
+              <span class="action-label">Log</span>
+            </button>
+            <button id="btn-download" type="button" class="action-btn intent-accent" disabled title="Download decompiled output as ZIP">
+              <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 17v2a1 1 0 001 1h12a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+              <span class="action-label">Download ZIP</span>
+            </button>
+            <button id="btn-mobsf-scan" type="button" class="action-btn intent-success hidden" disabled title="Send this APK to MobSF and open the report">
+              <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+                <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+              <span class="action-label">Scan in MobSF</span>
+            </button>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <button id="btn-delete" type="button" class="action-btn intent-danger" disabled title="Delete this job and all its decompiled output">
+              <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 7h14M10 7V5a1 1 0 011-1h2a1 1 0 011 1v2M7 7l1 12a2 2 0 002 2h4a2 2 0 002-2l1-12M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+              <span class="action-label">Delete</span>
+            </button>
           </div>
         </header>
 
@@ -81,7 +103,10 @@
           </div>
           <div class="editor-pane">
             <div class="pane-tabs" role="tablist">
-              <button type="button" class="pane-tab active" data-pane-tab="editor" role="tab" aria-selected="true">
+              <button type="button" class="pane-tab active" data-pane-tab="overview" role="tab" aria-selected="true" disabled>
+                <span>Overview</span>
+              </button>
+              <button type="button" class="pane-tab" data-pane-tab="editor" role="tab" aria-selected="false">
                 <span>Editor</span>
               </button>
               <button type="button" class="pane-tab" data-pane-tab="analysis" role="tab" aria-selected="false" disabled>
@@ -90,7 +115,12 @@
               </button>
             </div>
 
-            <section class="pane-section" data-pane-section="editor">
+            <section class="pane-section" data-pane-section="overview">
+              <div id="overview-empty" class="overview-empty muted">Select a job to see APK details.</div>
+              <div id="overview-content" class="overview-content hidden"></div>
+            </section>
+
+            <section class="pane-section hidden" data-pane-section="editor">
               <div id="tabs" class="tabs"></div>
               <div id="editor-status" class="editor-status muted small"></div>
               <div id="editor-mount" class="editor-mount"></div>

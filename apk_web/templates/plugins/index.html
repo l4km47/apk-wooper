@@ -28,7 +28,7 @@
             </div>
             {% if p.description %}<p class="plugin-card-desc">{{ p.description }}</p>{% endif %}
             <div class="plugin-card-meta muted small">
-              v{{ p.version }} &middot; {{ p.mode }}
+              {{ p.version }} &middot; {{ p.mode }}
               {% if p.accepts %}&middot; {{ p.accepts|length }} rule(s){% endif %}
             </div>
             {% if not p.healthy.ok %}

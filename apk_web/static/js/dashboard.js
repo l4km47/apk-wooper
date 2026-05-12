@@ -965,7 +965,7 @@ function renderPluginsSettings() {
       <div class="plugin-settings-head">
         <span class="plugin-settings-name">${escapeHtml(plg.name)}</span>
         <span class="plugin-settings-source ${plg.source}">${plg.source}</span>
-        <span class="muted small">v${escapeHtml(plg.version || "0.0.0")}</span>
+        <span class="muted small">${escapeHtml(plg.version || "0.0.0")}</span>
       </div>
       <div class="muted small">${escapeHtml(plg.description || "")}</div>
       <div class="muted small">URL: <code>${escapeHtml(plg.url)}</code> &middot; mode: ${escapeHtml(plg.mode)}</div>
@@ -1070,12 +1070,40 @@ function renderJobs(jobs) {
     div.className = "job-item" + (j.id === selectedJobId ? " active" : "");
     div.dataset.jobId = j.id;
 
-    const top = document.createElement("div");
-    top.className = "job-item-top";
+    const am = j.apk_meta || {};
+
+    const head = document.createElement("div");
+    head.className = "job-item-top job-item-row";
+
+    const iconBox = document.createElement("div");
+    iconBox.className = "job-item-icon";
+    if (am.icon_rel) {
+      const img = document.createElement("img");
+      img.alt = "";
+      img.loading = "lazy";
+      img.src = `/api/jobs/${encodeURIComponent(j.id)}/icon`;
+      img.addEventListener("error", () => {
+        img.remove();
+        iconBox.textContent = "APK";
+      });
+      iconBox.appendChild(img);
+    } else {
+      iconBox.textContent = "APK";
+    }
+    head.appendChild(iconBox);
+
+    const body = document.createElement("div");
+    body.className = "job-item-body";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "job-item-row";
 
     const name = document.createElement("div");
     name.className = "job-name";
-    name.textContent = j.original_filename || j.id;
+    name.textContent = am.label || j.original_filename || j.id;
+    name.title = am.label
+      ? `${am.label}\n${am.package || ""}`.trim()
+      : (j.original_filename || j.id);
 
     if ((j.analysis_high_count || 0) > 0) {
       const dot = document.createElement("span");
@@ -1088,8 +1116,33 @@ function renderJobs(jobs) {
     badge.className = `badge ${badgeClass(j.status)}`;
     badge.textContent = j.status || "unknown";
 
-    top.appendChild(name);
-    top.appendChild(badge);
+    titleRow.appendChild(name);
+    titleRow.appendChild(badge);
+    body.appendChild(titleRow);
+
+    if (am.package || am.version_name || am.target_sdk != null) {
+      const subRow = document.createElement("div");
+      subRow.className = "job-item-row";
+
+      const pkg = document.createElement("span");
+      pkg.className = "job-item-pkg";
+      pkg.textContent = am.package || "";
+      pkg.title = am.package || "";
+      subRow.appendChild(pkg);
+
+      const versionBits = [];
+      if (am.version_name) versionBits.push(`v${am.version_name}`);
+      if (am.target_sdk != null) versionBits.push(`sdk ${am.target_sdk}`);
+      if (versionBits.length) {
+        const ver = document.createElement("span");
+        ver.className = "job-item-version";
+        ver.textContent = versionBits.join(" · ");
+        subRow.appendChild(ver);
+      }
+      body.appendChild(subRow);
+    }
+
+    head.appendChild(body);
 
     const meta = document.createElement("div");
     meta.className = "job-meta muted small";
@@ -1098,12 +1151,14 @@ function renderJobs(jobs) {
     left.textContent = formatTime(j.created_at);
 
     const right = document.createElement("span");
-    right.textContent = j.id.slice(0, 8);
+    const hashShort = (am.hashes && am.hashes.sha256) ? am.hashes.sha256.slice(0, 8) : j.id.slice(0, 8);
+    right.textContent = hashShort;
+    right.title = (am.hashes && am.hashes.sha256) ? `sha256: ${am.hashes.sha256}` : `job id: ${j.id}`;
 
     meta.appendChild(left);
     meta.appendChild(right);
 
-    div.appendChild(top);
+    div.appendChild(head);
     div.appendChild(meta);
 
     const actions = document.createElement("div");
@@ -1276,6 +1331,7 @@ async function selectJob(jobId) {
   clearOpenTabs();
   hideTreeProgress();
   resetAnalysisUI();
+  resetOverviewUI();
   if (treeSearchInput) {
     treeSearchInput.value = "";
     treeSearchInput.disabled = true;
@@ -1300,7 +1356,10 @@ async function selectJob(jobId) {
     if (hasOutput(meta.status)) {
       await loadTree(jobId, meta);
       setAnalysisTabEnabled(true, meta.analysis_high_count || 0);
+      setOverviewTabEnabled(true);
+      switchPaneTab("overview");
       void refreshAnalysisStatus(jobId);
+      void renderOverview(jobId);
     } else {
       treeRoot.textContent =
         meta.status === "failed"
@@ -1668,6 +1727,10 @@ async function openFile(relPath) {
     return;
   }
 
+  if (_activePaneTab !== "editor") {
+    switchPaneTab("editor");
+  }
+
   activePath = relPath;
 
   const existing = openTabs.get(relPath);
@@ -1930,6 +1993,11 @@ const analysisSearchInput = document.getElementById("analysis-search");
 const analysisLoadMoreWrap = document.getElementById("analysis-load-more-wrap");
 const analysisLoadMoreBtn = document.getElementById("analysis-load-more");
 
+const overviewTabBtn = document.querySelector('.pane-tab[data-pane-tab="overview"]');
+const overviewEmptyEl = document.getElementById("overview-empty");
+const overviewContentEl = document.getElementById("overview-content");
+let _overviewJobId = null;
+
 function switchPaneTab(name) {
   _activePaneTab = name;
   paneTabButtons.forEach((btn) => {
@@ -1950,7 +2018,290 @@ function switchPaneTab(name) {
         /* ignore */
       }
     });
+  } else if (name === "overview" && selectedJobId) {
+    void renderOverview(selectedJobId);
   }
+}
+
+function setOverviewTabEnabled(enabled) {
+  if (!overviewTabBtn) return;
+  overviewTabBtn.disabled = !enabled;
+  if (!enabled && _activePaneTab === "overview") {
+    switchPaneTab("editor");
+  }
+}
+
+function resetOverviewUI() {
+  _overviewJobId = null;
+  if (overviewEmptyEl) {
+    overviewEmptyEl.classList.remove("hidden");
+    overviewEmptyEl.textContent = "Select a job to see APK details.";
+  }
+  if (overviewContentEl) {
+    overviewContentEl.classList.add("hidden");
+    overviewContentEl.innerHTML = "";
+  }
+  setOverviewTabEnabled(false);
+}
+
+function _formatBytes(n) {
+  if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024;
+  for (const u of units) {
+    if (v < 1024) return `${v.toFixed(v < 10 ? 2 : 1)} ${u}`;
+    v /= 1024;
+  }
+  return `${v.toFixed(1)} TB`;
+}
+
+function _esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+async function renderOverview(jobId) {
+  if (!overviewContentEl) return;
+  if (_overviewJobId === jobId && overviewContentEl.dataset.ready === "1") {
+    return;
+  }
+  _overviewJobId = jobId;
+  overviewContentEl.dataset.ready = "0";
+  overviewContentEl.innerHTML = '<div class="muted small">Loading APK metadata...</div>';
+  overviewContentEl.classList.remove("hidden");
+  if (overviewEmptyEl) overviewEmptyEl.classList.add("hidden");
+
+  let apkMeta = null;
+  try {
+    const res = await fetchJSON(`/api/jobs/${jobId}/apk-meta`);
+    apkMeta = (res && res.apk_meta) || null;
+  } catch {
+    /* ignore – fall back to placeholder below */
+  }
+
+  const apkidGroups = await _loadApkidGroups(jobId);
+  _drawOverview(jobId, apkMeta || {}, apkidGroups);
+  if (_overviewJobId === jobId) {
+    overviewContentEl.dataset.ready = "1";
+  }
+}
+
+async function _loadApkidGroups(jobId) {
+  // Pull APKiD-prefixed findings from the analysis store and bucket by
+  // sub-category so the Overview can show a digestible summary.
+  try {
+    const res = await fetchJSON(
+      `/api/jobs/${encodeURIComponent(jobId)}/analysis?` +
+        new URLSearchParams({ tool: "apkid", limit: "500" }).toString(),
+    );
+    const items = (res && res.findings) || [];
+    const groups = {};
+    for (const f of items) {
+      const key = (f.extra && f.extra.apkid_category) || (f.rule_id || "").split(".")[1] || "other";
+      if (!groups[key]) groups[key] = [];
+      const label = (f.full_match || f.title || "").trim();
+      if (label && !groups[key].includes(label)) {
+        groups[key].push(label);
+      }
+    }
+    return groups;
+  } catch {
+    return null;
+  }
+}
+
+function _drawOverview(jobId, m, apkidGroups) {
+  if (!overviewContentEl || _overviewJobId !== jobId) return;
+  const iconUrl = m.icon_rel ? `/api/jobs/${encodeURIComponent(jobId)}/icon` : "";
+  const label = m.label || _selectedJobFilename(jobId) || "APK";
+  const pkg = m.package || "—";
+  const versionName = m.version_name || "—";
+  const versionCode = (m.version_code != null) ? m.version_code : "—";
+  const minSdk = (m.min_sdk != null) ? m.min_sdk : "—";
+  const targetSdk = (m.target_sdk != null) ? m.target_sdk : "—";
+  const compileSdk = (m.compile_sdk != null) ? m.compile_sdk : "—";
+  const size = _formatBytes(m.size_bytes);
+  const debuggable = m.is_debuggable === true ? "yes" : (m.is_debuggable === false ? "no" : "—");
+  const mainAct = m.main_activity || "—";
+
+  const hashes = m.hashes || {};
+  const perms = Array.isArray(m.permissions) ? m.permissions : [];
+
+  const apkidHtml = _renderApkidGroups(apkidGroups);
+
+  overviewContentEl.innerHTML = `
+    <div class="overview-card overview-app">
+      <div class="overview-icon-wrap">
+        ${iconUrl
+          ? `<img class="overview-icon" alt="" src="${_esc(iconUrl)}" />`
+          : `<div class="overview-icon overview-icon-placeholder" aria-hidden="true">apk</div>`}
+      </div>
+      <div class="overview-app-text">
+        <div class="overview-app-name" title="${_esc(label)}">${_esc(label)}</div>
+        <div class="overview-app-pkg muted" title="${_esc(pkg)}">${_esc(pkg)}</div>
+        <div class="overview-app-chips">
+          <span class="ov-chip">v ${_esc(versionName)}</span>
+          <span class="ov-chip muted">code ${_esc(versionCode)}</span>
+          <span class="ov-chip">min SDK ${_esc(minSdk)}</span>
+          <span class="ov-chip">target ${_esc(targetSdk)}</span>
+          <span class="ov-chip muted">compile ${_esc(compileSdk)}</span>
+          <span class="ov-chip muted">${_esc(size)}</span>
+          ${m.is_debuggable === true
+            ? '<span class="ov-chip ov-chip-warn">debuggable</span>'
+            : ""}
+        </div>
+      </div>
+      <div class="overview-app-actions">
+        <button type="button" class="ghost small" data-overview-refresh="${_esc(jobId)}">Refresh</button>
+      </div>
+    </div>
+
+    ${apkidHtml}
+
+    <div class="overview-card">
+      <div class="overview-card-title">Fingerprints</div>
+      <div class="overview-fp-row">
+        <span class="overview-fp-label">MD5</span>
+        <code class="overview-fp-val">${_esc(hashes.md5 || "—")}</code>
+        ${hashes.md5 ? `<button type="button" class="ghost small" data-copy="${_esc(hashes.md5)}">Copy</button>` : ""}
+      </div>
+      <div class="overview-fp-row">
+        <span class="overview-fp-label">SHA-1</span>
+        <code class="overview-fp-val">${_esc(hashes.sha1 || "—")}</code>
+        ${hashes.sha1 ? `<button type="button" class="ghost small" data-copy="${_esc(hashes.sha1)}">Copy</button>` : ""}
+      </div>
+      <div class="overview-fp-row">
+        <span class="overview-fp-label">SHA-256</span>
+        <code class="overview-fp-val">${_esc(hashes.sha256 || "—")}</code>
+        ${hashes.sha256 ? `<button type="button" class="ghost small" data-copy="${_esc(hashes.sha256)}">Copy</button>` : ""}
+      </div>
+    </div>
+
+    <div class="overview-card">
+      <div class="overview-card-title">Manifest</div>
+      <div class="overview-kv">
+        <div><span class="overview-kv-k">Main activity</span><span class="overview-kv-v">${_esc(mainAct)}</span></div>
+        <div><span class="overview-kv-k">Debuggable</span><span class="overview-kv-v">${_esc(debuggable)}</span></div>
+        <div><span class="overview-kv-k">Permissions</span><span class="overview-kv-v">${perms.length} declared</span></div>
+      </div>
+      ${perms.length
+        ? `<details class="overview-perm-details">
+             <summary>Show all permissions</summary>
+             <ul class="overview-perm-list">
+               ${perms.map((p) => `<li><code>${_esc(p)}</code></li>`).join("")}
+             </ul>
+           </details>`
+        : ""}
+    </div>
+  `;
+
+  overviewContentEl.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const value = btn.getAttribute("data-copy") || "";
+      try {
+        await navigator.clipboard.writeText(value);
+        const prev = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = prev; }, 1200);
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
+  const refreshBtn = overviewContentEl.querySelector("[data-overview-refresh]");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      refreshBtn.disabled = true;
+      const orig = refreshBtn.textContent;
+      refreshBtn.textContent = "Refreshing...";
+      try {
+        await fetchJSON(`/api/jobs/${jobId}/apk-meta`, { method: "POST" });
+        overviewContentEl.dataset.ready = "0";
+        await renderOverview(jobId);
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = orig;
+      }
+    });
+  }
+}
+
+function _renderApkidGroups(apkidGroups) {
+  if (!apkidGroups || !Object.keys(apkidGroups).length) {
+    return `
+      <div class="overview-card">
+        <div class="overview-card-title">APKiD detections</div>
+        <div class="muted small">No APKiD findings (scanner may be disabled — see Settings &rarr; Analysis engine).</div>
+      </div>
+    `;
+  }
+  const order = [
+    "compiler",
+    "packer",
+    "protector",
+    "obfuscator",
+    "manipulator",
+    "anti_vm",
+    "anti_emulator",
+    "anti_debug",
+    "anti_disassembly",
+  ];
+  const intentByCat = {
+    packer: "danger",
+    protector: "danger",
+    obfuscator: "warn",
+    manipulator: "warn",
+    anti_vm: "warn",
+    anti_emulator: "warn",
+    anti_debug: "warn",
+    anti_disassembly: "warn",
+    compiler: "info",
+  };
+  const seenKeys = new Set();
+  const orderedKeys = [];
+  for (const k of order) {
+    if (apkidGroups[k]) {
+      orderedKeys.push(k);
+      seenKeys.add(k);
+    }
+  }
+  for (const k of Object.keys(apkidGroups).sort()) {
+    if (!seenKeys.has(k)) orderedKeys.push(k);
+  }
+
+  const groupsHtml = orderedKeys.map((k) => {
+    const items = apkidGroups[k] || [];
+    if (!items.length) return "";
+    const intent = intentByCat[k] || "info";
+    return `
+      <div class="apkid-group">
+        <div class="apkid-group-head">
+          <span class="apkid-cat apkid-cat-${_esc(intent)}">${_esc(k.replace(/_/g, " "))}</span>
+          <span class="muted small">${items.length} match${items.length === 1 ? "" : "es"}</span>
+        </div>
+        <div class="apkid-tags">
+          ${items.map((label) => `<span class="apkid-tag apkid-tag-${_esc(intent)}">${_esc(label)}</span>`).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="overview-card">
+      <div class="overview-card-title">APKiD detections</div>
+      ${groupsHtml}
+    </div>
+  `;
+}
+
+function _selectedJobFilename(jobId) {
+  const j = (_allJobs || []).find((x) => x.id === jobId);
+  return (j && j.original_filename) || "";
 }
 
 paneTabButtons.forEach((btn) => {
@@ -2625,9 +2976,11 @@ async function sendCurrentJobToMobsf() {
     window.location.assign("/plugins/mobsf");
     return;
   }
-  const prev = btnMobsfScan.textContent;
+  const labelEl = btnMobsfScan.querySelector(".action-label") || btnMobsfScan;
+  const prev = labelEl.textContent;
   btnMobsfScan.disabled = true;
-  btnMobsfScan.textContent = "Sending to MobSF...";
+  btnMobsfScan.classList.add("is-busy");
+  labelEl.textContent = "Sending to MobSF...";
   try {
     const res = await fetchJSON(`/plugins/mobsf/scan/${encodeURIComponent(selectedJobId)}`, {
       method: "POST",
@@ -2639,7 +2992,8 @@ async function sendCurrentJobToMobsf() {
   } catch (e) {
     await showAlert("MobSF scan failed", String(e.message || e));
     btnMobsfScan.disabled = false;
-    btnMobsfScan.textContent = prev;
+    btnMobsfScan.classList.remove("is-busy");
+    labelEl.textContent = prev;
   }
 }
 
