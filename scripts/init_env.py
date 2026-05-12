@@ -8,8 +8,13 @@ Generates:
 Behavior:
   - If `.env` does not exist, it is created from `apk_web/.env.example`
     with the required secrets filled in.
-  - If `.env` exists, only missing required keys are appended (idempotent).
-  - With `--force`, existing required keys are overwritten with new values.
+  - If `.env` exists, the file is left untouched apart from:
+      * required secrets that are missing or look like a placeholder
+        ("change-me-...") are filled in, and
+      * any keys from `apk_web/.env.example` that are not present in
+        `.env` are appended (commented examples stay commented).
+    Existing user values are never overwritten.
+  - With `--force`, SECRET_KEY and the dashboard password are regenerated.
 
 The generated plaintext admin password is printed once to stdout and
 written to `.admin_password.txt` at the repo root (gitignored). Delete
@@ -28,8 +33,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = REPO_ROOT / ".env"
 ENV_EXAMPLE = REPO_ROOT / "apk_web" / ".env.example"
 PLAINTEXT_FILE = REPO_ROOT / ".admin_password.txt"
-
-REQUIRED_KEYS = ("SECRET_KEY", "DASHBOARD_PASSWORD_HASH")
 
 
 def _generate_secret_key() -> str:
@@ -65,6 +68,21 @@ def _read_env(path: Path) -> dict[str, str]:
     return values
 
 
+def _template_keys(text: str) -> list[str]:
+    """Return ordered list of *uncommented* KEY entries from a template."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.partition("=")[0].strip()
+        if key and key not in seen:
+            keys.append(key)
+            seen.add(key)
+    return keys
+
+
 def _replace_or_append(text: str, key: str, value: str) -> str:
     pattern = re.compile(rf"(?m)^{re.escape(key)}=.*$")
     new_line = f"{key}={value}"
@@ -83,7 +101,35 @@ def _strip_password_lines(text: str) -> str:
             out_lines.append("# " + line.lstrip())
         else:
             out_lines.append(line)
-    return "\n".join(out_lines) + ("\n" if text.endswith("\n") else "")
+    trailing = "\n" if text.endswith("\n") else ""
+    return "\n".join(out_lines) + trailing
+
+
+def _append_missing_keys(text: str, template_text: str, existing: dict[str, str]) -> tuple[str, list[str]]:
+    """Append any uncommented template keys that are not already in `text`."""
+    desired = _template_keys(template_text)
+    missing = [k for k in desired if k not in existing]
+    if not missing:
+        return text, []
+
+    if text and not text.endswith("\n"):
+        text += "\n"
+
+    additions: list[str] = []
+    additions.append("")
+    additions.append("# --- added by scripts/init_env.py (defaults from .env.example) ---")
+
+    template_lines = template_text.splitlines()
+    for key in missing:
+        for raw in template_lines:
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            if stripped.partition("=")[0].strip() == key:
+                additions.append(raw)
+                break
+
+    return text + "\n".join(additions) + "\n", missing
 
 
 def _write_plaintext_password(password: str) -> None:
@@ -113,23 +159,19 @@ def main() -> int:
         sys.stderr.write(f"ERROR: template not found: {ENV_EXAMPLE}\n")
         return 1
 
+    template_text = ENV_EXAMPLE.read_text(encoding="utf-8")
     existing = _read_env(ENV_FILE) if ENV_FILE.exists() else {}
+
+    base_text = (
+        ENV_FILE.read_text(encoding="utf-8")
+        if ENV_FILE.exists()
+        else template_text
+    )
 
     needs_secret = args.force or not existing.get("SECRET_KEY") or existing["SECRET_KEY"].startswith("change-me")
     needs_password = args.force or (
         not existing.get("DASHBOARD_PASSWORD_HASH")
         and not existing.get("DASHBOARD_PASSWORD")
-    )
-
-    if not needs_secret and not needs_password:
-        print(f"OK: {ENV_FILE.name} already has SECRET_KEY and a dashboard password configured. "
-              f"Use --force to regenerate.")
-        return 0
-
-    base_text = (
-        ENV_FILE.read_text(encoding="utf-8")
-        if ENV_FILE.exists()
-        else ENV_EXAMPLE.read_text(encoding="utf-8")
     )
 
     new_password: str | None = None
@@ -142,13 +184,22 @@ def main() -> int:
     if needs_secret:
         base_text = _replace_or_append(base_text, "SECRET_KEY", _generate_secret_key())
 
+    refreshed_existing = _read_env_text(base_text)
+    base_text, appended = _append_missing_keys(base_text, template_text, refreshed_existing)
+
     ENV_FILE.write_text(base_text, encoding="utf-8")
     try:
         ENV_FILE.chmod(0o600)
     except (OSError, NotImplementedError):
         pass
 
-    print(f"Wrote {ENV_FILE}")
+    if needs_secret or needs_password or appended:
+        print(f"Wrote {ENV_FILE}")
+    else:
+        print(f"OK: {ENV_FILE.name} is up to date.")
+
+    if appended:
+        print(f"Appended missing config keys: {', '.join(appended)}")
 
     if new_password is not None:
         _write_plaintext_password(new_password)
@@ -166,6 +217,18 @@ def main() -> int:
             print(banner)
 
     return 0
+
+
+def _read_env_text(text: str) -> dict[str, str]:
+    """Parse KEY=VALUE lines out of an in-memory env file body."""
+    values: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        values[key.strip()] = val.strip()
+    return values
 
 
 if __name__ == "__main__":

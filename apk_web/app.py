@@ -101,6 +101,8 @@ def create_app() -> Flask:
         except Exception as exc:  # noqa: BLE001
             app.logger.warning("plugin discovery failed (continuing): %s", exc)
 
+    _maybe_autostart_mobsf(app)
+
     import atexit
 
     def _cleanup() -> None:
@@ -112,3 +114,54 @@ def create_app() -> Flask:
     atexit.register(_cleanup)
 
     return app
+
+
+def _maybe_autostart_mobsf(app: Flask) -> None:
+    """If ENABLE_MOBSF=true and the MobSF clone looks ready, start it.
+
+    The child process is registered with :mod:`github_installer`'s
+    ``atexit`` hook so it stops automatically when the dashboard exits.
+    Failures are logged but never abort dashboard startup.
+    """
+    if not app.config.get("ENABLE_MOBSF", False):
+        return
+    if os.environ.get("APK_WOOPER_NO_MOBSF_AUTOSTART", "").lower() in {"1", "true", "yes"}:
+        return
+    try:
+        from urllib.parse import urlparse
+
+        from apk_web.plugins.mobsf import github_installer
+    except Exception as exc:  # noqa: BLE001
+        app.logger.info("MobSF auto-start skipped (import failed): %s", exc)
+        return
+
+    tools_root = Path(app.config["TOOLS_ROOT"])
+    if not (github_installer.repo_path(tools_root) / ".git").is_dir():
+        app.logger.info(
+            "MobSF auto-start skipped: clone missing under %s. "
+            "Open Plugins -> MobSF and click Clone to install it.",
+            tools_root,
+        )
+        return
+
+    host_port = 8000
+    parsed = urlparse(str(app.config.get("MOBSF_URL") or ""))
+    if parsed.port:
+        host_port = int(parsed.port)
+
+    try:
+        status = github_installer.github_status(tools_root)
+        if status.running:
+            app.logger.info(
+                "MobSF already running (pid=%s, port=%s); not starting again.",
+                status.pid,
+                status.host_port,
+            )
+            return
+        ok, message, _detail = github_installer.start(tools_root, host_port=host_port)
+        if ok:
+            app.logger.info("MobSF auto-start: %s", message)
+        else:
+            app.logger.warning("MobSF auto-start: %s", message)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.warning("MobSF auto-start failed: %s", exc)
